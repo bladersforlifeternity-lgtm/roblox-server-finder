@@ -90,15 +90,12 @@ function parsePosts(children) {
 }
 
 async function searchReddit(query, type = "link") {
-  // Rotate time window each call so we get different results each search
-  const timeWindows = ["day", "week", "month", "year", "all"];
-  const t = timeWindows[Math.floor(Math.random() * timeWindows.length)];
   try {
     const data = await redditGet("https://www.reddit.com/search.json", {
       q: query,
       limit: 100,
       sort: "new",
-      t,
+      t: "all",
       type,
     });
     return parsePosts(data?.data?.children || []);
@@ -287,7 +284,7 @@ async function searchGoogle(query) {
     if (e.response?.status === 429) {
       console.error("Google CSE: daily quota exceeded.");
     } else if (e.response?.status === 403) {
-      console.error("Google CSE 403:", e.response?.data?.error?.message || "invalid key");
+      console.error("Google CSE 403:", e.response?.data?.error?.message || "invalid key or API not enabled for GOOGLE_API_KEY");
     } else {
       console.error(`Google search [${query}]:`, e.message);
     }
@@ -470,4 +467,7 @@ app.get("/", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Brainrot Server Finder running on port ${PORT}`);
+  console.log(`📡 Reddit: enabled`);
+  console.log(`📺 YouTube: ${YOUTUBE_API_KEY ? "enabled" : "disabled (no YOUTUBE_API_KEY)"}`);
+  console.log(`🔵 Google: ${(GOOGLE_CX && GOOGLE_API_KEY) ? "enabled" : `disabled (GOOGLE_CX=${!!GOOGLE_CX}, GOOGLE_API_KEY=${!!GOOGLE_API_KEY})`}`);
 });
