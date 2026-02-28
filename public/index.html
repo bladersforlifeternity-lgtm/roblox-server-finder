@@ -24,8 +24,6 @@
     min-height: 100vh;
     overflow-x: hidden;
   }
-
-  /* Animated background */
   body::before {
     content: '';
     position: fixed;
@@ -35,7 +33,6 @@
     pointer-events: none;
     z-index: 0;
   }
-
   .wrapper { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 40px 20px; }
 
   header { text-align: center; margin-bottom: 50px; }
@@ -61,13 +58,8 @@
     background-clip: text;
     margin-bottom: 12px;
   }
-  header p {
-    color: var(--muted);
-    font-size: 1rem;
-    font-family: 'Space Mono', monospace;
-  }
+  header p { color: var(--muted); font-size: 1rem; font-family: 'Space Mono', monospace; }
 
-  /* Status bar */
   .status-bar {
     display: flex;
     gap: 12px;
@@ -79,31 +71,13 @@
     padding: 14px 20px;
     align-items: center;
   }
-  .status-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #555;
-    display: inline-block;
-    margin-right: 6px;
-  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; display: inline-block; margin-right: 6px; }
   .status-dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-  .pill {
-    font-family: 'Space Mono', monospace;
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    color: var(--muted);
-  }
+  .pill { font-family: 'Space Mono', monospace; font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); color: var(--muted); }
   .pill.active { border-color: var(--accent); color: var(--accent); }
 
-  /* Controls */
-  .controls {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 30px;
-    flex-wrap: wrap;
-  }
+  .controls { display: flex; gap: 10px; margin-bottom: 30px; flex-wrap: wrap; }
   input[type=text] {
     flex: 1;
     min-width: 200px;
@@ -129,27 +103,35 @@
     border-radius: 10px;
     padding: 12px 24px;
     transition: all 0.2s;
+    user-select: none;
   }
-  .btn-primary {
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white;
-  }
-  .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white; }
+  .btn-primary:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
   .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-  .btn-secondary {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text);
-  }
-  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-secondary { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* Loading */
-  .loading {
-    display: none;
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--muted);
+  /* Progress bar under buttons when searching */
+  .progress-bar-wrap {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 28px;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.2s;
   }
+  .progress-bar-wrap.show { opacity: 1; }
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  .loading { display: none; text-align: center; padding: 60px 20px; color: var(--muted); }
   .loading.show { display: block; }
   .spinner {
     width: 40px; height: 40px;
@@ -161,14 +143,7 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Results */
-  .results-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-    padding: 0 4px;
-  }
+  .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding: 0 4px; }
   .count-badge {
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     color: white;
@@ -188,11 +163,7 @@
     cursor: pointer;
   }
 
-  .results-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
+  .results-grid { display: flex; flex-direction: column; gap: 10px; }
 
   .card {
     background: var(--surface);
@@ -205,79 +176,34 @@
     transition: all 0.2s;
     animation: fadeUp 0.3s ease both;
   }
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(12px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
   .card:hover { border-color: var(--accent); background: #13131e; }
-
   .card-icon {
     width: 40px; height: 40px;
     background: linear-gradient(135deg, rgba(124,58,255,0.2), rgba(255,58,170,0.2));
     border: 1px solid rgba(124,58,255,0.3);
     border-radius: 10px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 18px;
-    flex-shrink: 0;
+    font-size: 18px; flex-shrink: 0;
   }
   .card-body { flex: 1; overflow: hidden; }
-  .card-code {
-    font-family: 'Space Mono', monospace;
-    font-size: 13px;
-    color: var(--green);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .card-source {
-    font-size: 11px;
-    color: var(--muted);
-    font-family: 'Space Mono', monospace;
-    margin-top: 3px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .card-provider {
-    font-size: 10px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-family: 'Space Mono', monospace;
-    flex-shrink: 0;
-  }
-  .card-provider.bing    { background: rgba(0,120,212,0.2); color: #4da8ff; border: 1px solid rgba(0,120,212,0.3); }
-  .card-provider.google  { background: rgba(66,133,244,0.2); color: #7baeff; border: 1px solid rgba(66,133,244,0.3); }
-  .card-provider.serpapi { background: rgba(255,180,0,0.2); color: #ffd54f; border: 1px solid rgba(255,180,0,0.3); }
-
+  .card-code { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--green); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-source { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-provider { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-family: 'Space Mono', monospace; flex-shrink: 0; }
+  .card-provider.reddit { background: rgba(255,69,0,0.15); color: #ff8c5a; border: 1px solid rgba(255,69,0,0.3); }
   .btn-join {
     background: linear-gradient(135deg, var(--accent), var(--accent2));
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 14px;
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    white-space: nowrap;
-    flex-shrink: 0;
-    text-decoration: none;
-    display: inline-block;
+    color: white; border: none; border-radius: 8px;
+    padding: 8px 14px; font-size: 12px; font-weight: 700;
+    cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    text-decoration: none; display: inline-block;
   }
   .btn-join:hover { opacity: 0.8; }
 
-  /* Empty/Error */
-  .empty {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--muted);
-    font-family: 'Space Mono', monospace;
-    font-size: 13px;
-    display: none;
-  }
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); font-family: 'Space Mono', monospace; font-size: 13px; display: none; }
   .empty.show { display: block; }
   .empty-icon { font-size: 48px; margin-bottom: 16px; }
 
-  /* No API key warning */
   .warn-box {
     background: rgba(255,180,0,0.08);
     border: 1px solid rgba(255,180,0,0.3);
@@ -306,6 +232,7 @@
     <span class="pill" id="pillBing">Bing ✗</span>
     <span class="pill" id="pillGoogle">Google ✗</span>
     <span class="pill" id="pillSerp">SerpAPI ✗</span>
+    <span class="pill active" id="pillReddit">Reddit ✓</span>
     <span style="margin-left:auto;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)" id="lastFetch">—</span>
   </div>
 
@@ -318,13 +245,18 @@
   <div class="controls">
     <input type="text" id="queryInput" placeholder='Custom query (leave empty for default search)' />
     <button class="btn-primary" id="searchBtn" onclick="doSearch()">🔍 Find Servers</button>
-    <button class="btn-secondary" onclick="doSearch(true)">↺ Refresh</button>
+    <button class="btn-secondary" id="refreshBtn" onclick="doSearch(true)">↺ Refresh</button>
+  </div>
+
+  <!-- Thin progress bar -->
+  <div class="progress-bar-wrap" id="progressWrap">
+    <div class="progress-bar" id="progressBar"></div>
   </div>
 
   <div class="loading" id="loading">
     <div class="spinner"></div>
-    <p>Scanning the internet for private servers…</p>
-    <p style="font-size:12px;margin-top:8px;font-family:'Space Mono',monospace">This may take 10–20 seconds</p>
+    <p id="loadingMsg">Scanning Reddit for private servers…</p>
+    <p style="font-size:12px;margin-top:8px;font-family:'Space Mono',monospace" id="loadingHint">This may take 15–30 seconds</p>
   </div>
 
   <div id="resultsSection" style="display:none">
@@ -337,49 +269,97 @@
 
   <div class="empty" id="emptyState">
     <div class="empty-icon">🧠</div>
-    <p>No servers found.<br/>Try a different query or check your API keys.</p>
+    <p>No servers found.<br/>Try a different query or check back later.</p>
   </div>
 </div>
 
 <script>
 let currentResults = [];
+let activeController = null; // AbortController for the current fetch
+let searchLocked = false;    // prevents concurrent requests
+let progressTimer = null;
 
+// ── Simulated progress bar ────────────────────────────────────────────────────
+function startProgress() {
+  const bar = document.getElementById('progressBar');
+  const wrap = document.getElementById('progressWrap');
+  wrap.classList.add('show');
+  let pct = 0;
+  bar.style.width = '0%';
+  clearInterval(progressTimer);
+  // Advance quickly to 80%, then slow way down (indeterminate feel)
+  progressTimer = setInterval(() => {
+    if (pct < 80) pct += Math.random() * 6;
+    else if (pct < 95) pct += 0.2;
+    bar.style.width = pct + '%';
+  }, 400);
+}
+function finishProgress() {
+  clearInterval(progressTimer);
+  const bar = document.getElementById('progressBar');
+  const wrap = document.getElementById('progressWrap');
+  bar.style.width = '100%';
+  setTimeout(() => { wrap.classList.remove('show'); bar.style.width = '0%'; }, 600);
+}
+
+// ── Status check ─────────────────────────────────────────────────────────────
 async function loadStatus() {
   try {
     const r = await fetch('/api/status');
     const d = await r.json();
     document.getElementById('statusDot').className = 'status-dot on';
-    document.getElementById('statusText').textContent = 'API Online';
+    document.getElementById('statusText').textContent = d.fetchInProgress ? 'Fetching…' : 'API Online';
 
     const anyActive = d.providers.bing || d.providers.google || d.providers.serpapi || d.providers.duckduckgo;
     if (!anyActive) document.getElementById('warnBox').classList.add('show');
 
-    const pb = document.getElementById('pillBing');
-    const pg = document.getElementById('pillGoogle');
-    const ps = document.getElementById('pillSerp');
-    if (d.providers.bing)        { pb.textContent = 'Bing ✓'; pb.className = 'pill active'; }
-    if (d.providers.google)      { pg.textContent = 'Google ✓'; pg.className = 'pill active'; }
-    if (d.providers.serpapi)     { ps.textContent = 'SerpAPI ✓'; ps.className = 'pill active'; }
-    if (d.providers.duckduckgo)  { pb.textContent = 'DDG ✓'; pb.className = 'pill active'; }
-
+    if (d.providers.bing)       { const p = document.getElementById('pillBing');   p.textContent = 'Bing ✓';    p.className = 'pill active'; }
+    if (d.providers.google)     { const p = document.getElementById('pillGoogle'); p.textContent = 'Google ✓';  p.className = 'pill active'; }
+    if (d.providers.serpapi)    { const p = document.getElementById('pillSerp');   p.textContent = 'SerpAPI ✓'; p.className = 'pill active'; }
     if (d.lastFetch) document.getElementById('lastFetch').textContent = 'Last: ' + new Date(d.lastFetch).toLocaleTimeString();
-    if (d.cached > 0) document.getElementById('countBadge').textContent = d.cached + ' cached';
   } catch(e) {
     document.getElementById('statusText').textContent = 'Offline';
+    document.getElementById('statusDot').style.background = '#ff4444';
   }
 }
 
+// ── Main search ───────────────────────────────────────────────────────────────
 async function doSearch(refresh = false) {
-  const btn = document.getElementById('searchBtn');
+  // Hard guard: one request at a time
+  if (searchLocked) return;
+  searchLocked = true;
+
+  // Cancel any lingering previous fetch
+  if (activeController) activeController.abort();
+  activeController = new AbortController();
+
+  const btn     = document.getElementById('searchBtn');
+  const refBtn  = document.getElementById('refreshBtn');
   const loading = document.getElementById('loading');
   const resultsSection = document.getElementById('resultsSection');
   const emptyState = document.getElementById('emptyState');
   const query = document.getElementById('queryInput').value.trim();
 
   btn.disabled = true;
+  refBtn.disabled = true;
   loading.classList.add('show');
   resultsSection.style.display = 'none';
   emptyState.classList.remove('show');
+  startProgress();
+
+  // Cycle loading messages to show progress
+  const messages = [
+    'Scanning Reddit for private servers…',
+    'Searching r/roblox…',
+    'Checking r/RobloxHelp…',
+    'Parsing share codes…',
+    'Almost there…',
+  ];
+  let msgIdx = 0;
+  const msgTimer = setInterval(() => {
+    msgIdx = (msgIdx + 1) % messages.length;
+    document.getElementById('loadingMsg').textContent = messages[msgIdx];
+  }, 4000);
 
   try {
     let url = '/api/servers';
@@ -388,15 +368,16 @@ async function doSearch(refresh = false) {
     if (query) params.push('q=' + encodeURIComponent(query));
     if (params.length) url += '?' + params.join('&');
 
-    const r = await fetch(url);
+    const r = await fetch(url, { signal: activeController.signal });
     const d = await r.json();
 
+    clearInterval(msgTimer);
+    finishProgress();
     loading.classList.remove('show');
-    btn.disabled = false;
 
     currentResults = d.results || [];
 
-    if (!d.success) throw new Error(d.error);
+    if (!d.success) throw new Error(d.error || 'Unknown error');
 
     if (currentResults.length === 0) {
       emptyState.classList.add('show');
@@ -407,37 +388,48 @@ async function doSearch(refresh = false) {
     if (d.lastFetch) {
       document.getElementById('lastFetch').textContent = 'Last: ' + new Date(d.lastFetch).toLocaleTimeString();
     }
+    document.getElementById('statusText').textContent = 'API Online';
   } catch(e) {
+    clearInterval(msgTimer);
+    finishProgress();
     loading.classList.remove('show');
+
+    if (e.name === 'AbortError') {
+      // Silently swallow aborted requests
+    } else {
+      emptyState.innerHTML = `<div class="empty-icon">⚠️</div><p>Error: ${e.message}</p>`;
+      emptyState.classList.add('show');
+    }
+  } finally {
     btn.disabled = false;
-    emptyState.innerHTML = `<div class="empty-icon">⚠️</div><p>Error: ${e.message}</p>`;
-    emptyState.classList.add('show');
+    refBtn.disabled = false;
+    searchLocked = false;
   }
 }
 
+// ── Render ────────────────────────────────────────────────────────────────────
 function renderResults(results) {
   const grid = document.getElementById('resultsGrid');
   const badge = document.getElementById('countBadge');
   badge.textContent = results.length + ' server' + (results.length !== 1 ? 's' : '') + ' found';
-
   grid.innerHTML = '';
   results.forEach((r, i) => {
+    let sourceHost = 'unknown';
+    try { sourceHost = new URL(r.source).hostname; } catch(_) {}
     const card = document.createElement('div');
     card.className = 'card';
     card.style.animationDelay = (i * 40) + 'ms';
-    const sourceHost = r.source ? new URL(r.source).hostname : 'unknown';
     card.innerHTML = `
       <div class="card-icon">🔗</div>
       <div class="card-body">
         <div class="card-code">${r.url}</div>
         <div class="card-source">via ${sourceHost} · ${r.title || ''}</div>
       </div>
-      <span class="card-provider ${r.provider}">${r.provider}</span>
-      <a class="btn-join" href="${r.url}" target="_blank">Join →</a>
+      <span class="card-provider ${r.provider || 'reddit'}">${r.provider || 'reddit'}</span>
+      <a class="btn-join" href="${r.url}" target="_blank" rel="noopener">Join →</a>
     `;
     grid.appendChild(card);
   });
-
   document.getElementById('resultsSection').style.display = 'block';
 }
 
@@ -446,6 +438,11 @@ function copyAll() {
   const text = currentResults.map(r => r.url).join('\n');
   navigator.clipboard.writeText(text).then(() => alert('Copied ' + currentResults.length + ' links!'));
 }
+
+// ── Enter key to search ───────────────────────────────────────────────────────
+document.getElementById('queryInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doSearch();
+});
 
 loadStatus();
 </script>
