@@ -93,7 +93,7 @@ async function findPrivateServers(customQuery = null) {
   for (const query of queries) {
     const results = await searchDuckDuckGo(query);
     allResults.push(...results);
-    await new Promise(r => setTimeout(r, 1000)); // avoid rate limiting
+    await new Promise(r => setTimeout(r, 1000));
   }
 
   const seen = new Map();
