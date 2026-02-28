@@ -414,17 +414,17 @@ function renderResults(results) {
   badge.textContent = results.length + ' server' + (results.length !== 1 ? 's' : '') + ' found';
   grid.innerHTML = '';
   results.forEach((r, i) => {
-    let sourceHost = 'unknown';
-    try { sourceHost = new URL(r.source).hostname; } catch(_) {}
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.style.animationDelay = (i * 40) + 'ms';
+    const sourceHost = (() => { try { return new URL(r.source).hostname; } catch(_) { return 'unknown'; } })();
+    const typeBadge = r.type
+      ? `<span style="font-family:'Space Mono',monospace;font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(58,255,180,0.1);color:var(--green);border:1px solid rgba(58,255,180,0.25);flex-shrink:0;">${r.type}</span>`
+      : '';
     card.innerHTML = `
       <div class="card-icon">🔗</div>
       <div class="card-body">
         <div class="card-code">${r.url}</div>
         <div class="card-source">via ${sourceHost} · ${r.title || ''}</div>
       </div>
+      ${typeBadge}
       <span class="card-provider ${r.provider || 'reddit'}">${r.provider || 'reddit'}</span>
       <a class="btn-join" href="${r.url}" target="_blank" rel="noopener">Join →</a>
     `;
