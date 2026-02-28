@@ -215,7 +215,58 @@ async function searchYoutube(query) {
   }
 }
 
-// Run searches in controlled batches to avoid hammering Reddit
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  PROVIDER: GOOGLE CUSTOM SEARCH API                              ║
+// ║  Free: 100 queries/day — uses same key as YouTube                ║
+// ║  Set env vars: YOUTUBE_API_KEY (already set) + GOOGLE_CX         ║
+// ╚══════════════════════════════════════════════════════════════════╝
+const GOOGLE_CX = process.env.GOOGLE_CX || null;
+// Reuses YOUTUBE_API_KEY as the Google API key — same project, same key
+const GOOGLE_API_KEY = process.env.YOUTUBE_API_KEY || null;
+
+async function searchGoogle(query) {
+  if (!GOOGLE_CX || !GOOGLE_API_KEY) return [];
+  try {
+    const found = [];
+    // Google CSE returns max 10 per call — fetch 3 pages = 30 results (3 queries)
+    for (let start = 1; start <= 21; start += 10) {
+      const res = await http.get("https://www.googleapis.com/customsearch/v1", {
+        params: {
+          key: GOOGLE_API_KEY,
+          cx: GOOGLE_CX,
+          q: query,
+          num: 10,
+          start,
+        },
+      });
+      const items = res.data?.items || [];
+      if (!items.length) break;
+      for (const item of items) {
+        const combined = [item.title, item.snippet, item.link].filter(Boolean).join(" ");
+        extractShareLinks(combined).forEach(({ code, url, type }) =>
+          found.push({
+            code, url, type: type || "Server",
+            source: item.link || "https://google.com",
+            title: item.title || "Google result",
+            provider: "google",
+          })
+        );
+      }
+      // Respect Google's rate limit
+      if (start < 21) await new Promise((r) => setTimeout(r, 500));
+    }
+    return found;
+  } catch (e) {
+    if (e.response?.status === 429) {
+      console.error("Google CSE: daily quota exceeded (100/day free limit).");
+    } else if (e.response?.status === 403) {
+      console.error("Google CSE: invalid key or API not enabled. Check YOUTUBE_API_KEY and GOOGLE_CX.");
+    } else {
+      console.error(`Google search [${query}]:`, e.message);
+    }
+    return [];
+  }
+}
 async function runBatch(tasks, batchSize = 2, delayMs = 1200) {
   const results = [];
   for (let i = 0; i < tasks.length; i += batchSize) {
@@ -237,6 +288,7 @@ async function findPrivateServers(customQuery = null) {
         () => searchReddit(customQuery),
         () => searchReddit(customQuery, "comment"),
         () => searchYoutube(customQuery + " roblox private server"),
+        () => searchGoogle(customQuery + " roblox.com/share"),
       ]
     : [
         // ── Reddit posts ──────────────────────────────────────────────────────
@@ -258,6 +310,9 @@ async function findPrivateServers(customQuery = null) {
         // ── YouTube (only runs if YOUTUBE_API_KEY is set) ─────────────────────
         () => searchYoutube("steal a brainrot roblox private server code"),
         () => searchYoutube("steal a brainrot roblox.com/share"),
+        // ── Google Custom Search (only runs if GOOGLE_CX is set) ─────────────
+        () => searchGoogle("steal a brainrot roblox.com/share?code"),
+        () => searchGoogle("steal a brainrot roblox private server site:roblox.com/share"),
       ];
 
   const allResults = await runBatch(tasks, 2, 1200);
@@ -348,6 +403,7 @@ app.get("/api/status", (req, res) => {
     providers: {
       reddit: true,
       youtube: !!YOUTUBE_API_KEY,
+      google: !!(GOOGLE_CX && GOOGLE_API_KEY),
     },
     cached: cachedLinks.length,
     lastFetch: lastFetch ? new Date(lastFetch).toISOString() : null,
