@@ -192,6 +192,7 @@
   .card-provider { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-family: 'Space Mono', monospace; flex-shrink: 0; }
   .card-provider.reddit  { background: rgba(255,69,0,0.15);  color: #ff8c5a; border: 1px solid rgba(255,69,0,0.3); }
   .card-provider.youtube { background: rgba(255,0,0,0.15);   color: #ff6b6b; border: 1px solid rgba(255,0,0,0.3); }
+  .card-provider.google  { background: rgba(66,133,244,0.15); color: #7baeff; border: 1px solid rgba(66,133,244,0.3); }
 
   /* ── Filter bar ──────────────────────────────────────────────────────────── */
   .filter-bar {
@@ -222,8 +223,9 @@
   }
   .filter-btn:hover { border-color: var(--accent); color: var(--text); }
   .filter-btn.active-all     { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; color: white; }
-  .filter-btn.active-reddit  { background: rgba(255,69,0,0.2);  border-color: #ff8c5a; color: #ff8c5a; }
-  .filter-btn.active-youtube { background: rgba(255,0,0,0.2);   border-color: #ff6b6b; color: #ff6b6b; }
+  .filter-btn.active-reddit  { background: rgba(255,69,0,0.2);   border-color: #ff8c5a; color: #ff8c5a; }
+  .filter-btn.active-youtube { background: rgba(255,0,0,0.2);    border-color: #ff6b6b; color: #ff6b6b; }
+  .filter-btn.active-google  { background: rgba(66,133,244,0.2); border-color: #7baeff; color: #7baeff; }
   .filter-count {
     font-family: 'Space Mono', monospace;
     font-size: 10px;
@@ -273,6 +275,7 @@
     <span><span class="status-dot" id="statusDot"></span><span id="statusText" style="font-family:'Space Mono',monospace;font-size:12px;">checking...</span></span>
     <span class="pill active" id="pillReddit">Reddit ✓</span>
     <span class="pill" id="pillYoutube">YouTube ✗</span>
+    <span class="pill" id="pillGoogle">Google ✗</span>
     <span style="margin-left:auto;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)" id="lastFetch">—</span>
   </div>
 
@@ -303,6 +306,7 @@
       <button class="filter-btn active-all" id="filterAll"     onclick="setFilter('all')">All <span class="filter-count" id="countAll">0</span></button>
       <button class="filter-btn"            id="filterReddit"  onclick="setFilter('reddit')">🔴 Reddit <span class="filter-count" id="countReddit">0</span></button>
       <button class="filter-btn"            id="filterYoutube" onclick="setFilter('youtube')">▶️ YouTube <span class="filter-count" id="countYoutube">0</span></button>
+      <button class="filter-btn"            id="filterGoogle"  onclick="setFilter('google')">🔵 Google <span class="filter-count" id="countGoogle">0</span></button>
     </div>
     <div class="results-grid" id="resultsGrid"></div>
   </div>
@@ -355,6 +359,11 @@ async function loadStatus() {
       p.textContent = 'YouTube ✓';
       p.className = 'pill active';
     }
+    if (d.providers.google) {
+      const p = document.getElementById('pillGoogle');
+      p.textContent = 'Google ✓';
+      p.className = 'pill active';
+    }
 
     if (d.lastFetch) document.getElementById('lastFetch').textContent = 'Last: ' + new Date(d.lastFetch).toLocaleTimeString();
   } catch(e) {
@@ -388,6 +397,7 @@ async function doSearch() {
     'Searching r/roblox & r/RobloxHelp…',
     'Checking r/StealaBrainrot1…',
     'Scanning YouTube descriptions…',
+    'Searching Google for share links…',
     'Parsing share codes…',
     'Almost there…',
   ];
@@ -441,12 +451,10 @@ async function doSearch() {
 // ── Filter ────────────────────────────────────────────────────────────────────
 function setFilter(f) {
   activeFilter = f;
-
-  // Update button active states
   document.getElementById('filterAll').className     = 'filter-btn' + (f === 'all'     ? ' active-all'     : '');
   document.getElementById('filterReddit').className  = 'filter-btn' + (f === 'reddit'  ? ' active-reddit'  : '');
   document.getElementById('filterYoutube').className = 'filter-btn' + (f === 'youtube' ? ' active-youtube' : '');
-
+  document.getElementById('filterGoogle').className  = 'filter-btn' + (f === 'google'  ? ' active-google'  : '');
   applyFilter();
 }
 
@@ -484,12 +492,13 @@ function renderResults(results) {
   badge.textContent = results.length + ' server' + (results.length !== 1 ? 's' : '') + ' found';
 
   // Count per provider
-  const counts = { all: results.length, reddit: 0, youtube: 0 };
+  const counts = { all: results.length, reddit: 0, youtube: 0, google: 0 };
   results.forEach(r => { if (counts[r.provider] !== undefined) counts[r.provider]++; });
 
   document.getElementById('countAll').textContent     = counts.all;
   document.getElementById('countReddit').textContent  = counts.reddit;
   document.getElementById('countYoutube').textContent = counts.youtube;
+  document.getElementById('countGoogle').textContent  = counts.google;
 
   // Show filter bar whenever there are results (even if only one provider)
   document.getElementById('filterBar').classList.toggle('show', results.length > 0);
@@ -516,7 +525,7 @@ function buildCards(results) {
     // Icon
     const icon = document.createElement('div');
     icon.className = 'card-icon';
-    icon.textContent = r.provider === 'youtube' ? '▶️' : '🔗';
+    icon.textContent = r.provider === 'youtube' ? '▶️' : r.provider === 'google' ? '🔵' : '🔗';
 
     // Body
     const body = document.createElement('div');
