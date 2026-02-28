@@ -18,14 +18,28 @@ const CACHE_TTL = 5 * 60 * 1000;
 let fetchInProgress = false;
 let fetchQueue = [];
 
-function extractShareCodes(text) {
-  const regex = /roblox\.com\/share\?code=([A-Za-z0-9_-]+)/g;
-  const codes = new Set();
+// Matches the full share URL and captures: code + optional &type=... param
+// Handles all known formats:
+//   roblox.com/share?code=ABC
+//   roblox.com/share?code=ABC&type=Server
+//   www.roblox.com/share?code=ABC&type=Server  (with or without protocol)
+const SHARE_REGEX = /(?:https?:\/\/)?(?:www\.)?roblox\.com\/share\?code=([A-Za-z0-9_\-]+)(?:&type=([A-Za-z0-9_\-]+))?/gi;
+
+function extractShareLinks(text) {
+  const seen = new Map(); // code → full entry
   let match;
-  while ((match = regex.exec(text)) !== null) {
-    codes.add(match[1]);
+  SHARE_REGEX.lastIndex = 0;
+  while ((match = SHARE_REGEX.exec(text)) !== null) {
+    const code = match[1];
+    const type = match[2] || null;
+    if (!seen.has(code)) {
+      const url = type
+        ? `https://www.roblox.com/share?code=${code}&type=${type}`
+        : `https://www.roblox.com/share?code=${code}`;
+      seen.set(code, { code, url, type });
+    }
   }
-  return [...codes];
+  return [...seen.values()];
 }
 
 // Shared axios instance with conservative timeout & retry
@@ -53,18 +67,19 @@ async function redditGet(url, params, retries = 2) {
   }
 }
 
-function parsePosts(children, permalinkKey = "permalink") {
+function parsePosts(children) {
   const found = [];
   for (const item of children) {
     const d = item.data;
     const combined =
       (d.title || "") + " " + (d.selftext || "") + " " + (d.url || "") + " " + (d.body || "");
-    const codes = extractShareCodes(combined);
-    codes.forEach((code) =>
+    const links = extractShareLinks(combined);
+    links.forEach(({ code, url, type }) =>
       found.push({
         code,
-        url: `https://www.roblox.com/share?code=${code}`,
-        source: `https://reddit.com${d[permalinkKey]}`,
+        url,
+        type: type || "Server",
+        source: `https://reddit.com${d.permalink}`,
         title: d.title || "Reddit comment",
         provider: "reddit",
       })
@@ -125,9 +140,12 @@ async function findPrivateServers(customQuery = null) {
         () => searchReddit("steal a brainrot roblox.com/share"),
         () => searchReddit("steal a brainrot private server roblox"),
         () => searchReddit("roblox share code steal brainrot"),
+        () => searchReddit('roblox.com/share?code type=Server steal a brainrot'),
         () => searchReddit("steal a brainrot roblox.com/share", "comment"),
+        () => searchReddit('roblox.com/share type=Server steal brainrot', "comment"),
         () => searchSubreddit("roblox", "steal a brainrot private server"),
         () => searchSubreddit("roblox", "steal a brainrot share code"),
+        () => searchSubreddit("roblox", "roblox.com/share type=Server brainrot"),
         () => searchSubreddit("RobloxHelp", "steal a brainrot"),
       ];
 
