@@ -90,12 +90,15 @@ function parsePosts(children) {
 }
 
 async function searchReddit(query, type = "link") {
+  // Rotate time window each call so we get different results each search
+  const timeWindows = ["day", "week", "month", "year", "all"];
+  const t = timeWindows[Math.floor(Math.random() * timeWindows.length)];
   try {
     const data = await redditGet("https://www.reddit.com/search.json", {
       q: query,
       limit: 100,
       sort: "new",
-      t: "all",
+      t,
       type,
     });
     return parsePosts(data?.data?.children || []);
@@ -227,7 +230,6 @@ async function searchGoogle(query) {
   if (!GOOGLE_CX || !GOOGLE_API_KEY) return [];
   try {
     const found = [];
-    // Google CSE returns max 10 per call — fetch 3 pages = 30 results (3 queries)
     for (let start = 1; start <= 21; start += 10) {
       const res = await http.get("https://www.googleapis.com/customsearch/v1", {
         params: {
@@ -238,34 +240,86 @@ async function searchGoogle(query) {
           start,
         },
       });
+
       const items = res.data?.items || [];
+      console.log(`Google [${query}] page ${start}: ${items.length} results, totalResults: ${res.data?.searchInformation?.totalResults}`);
+
       if (!items.length) break;
+
       for (const item of items) {
-        const combined = [item.title, item.snippet, item.link].filter(Boolean).join(" ");
-        extractShareLinks(combined).forEach(({ code, url, type }) =>
-          found.push({
-            code, url, type: type || "Server",
-            source: item.link || "https://google.com",
-            title: item.title || "Google result",
-            provider: "google",
-          })
-        );
+        // Check title + snippet + link + all pagemap data for share codes
+        const parts = [item.title, item.snippet, item.link];
+        // Also dig into pagemap if available (contains more page text)
+        if (item.pagemap) {
+          const pm = item.pagemap;
+          if (pm.metatags) parts.push(...pm.metatags.map(m => Object.values(m).join(" ")));
+          if (pm.webpage)  parts.push(...pm.webpage.map(w => [w.description, w.url].join(" ")));
+        }
+        const combined = parts.filter(Boolean).join(" ");
+        const links = extractShareLinks(combined);
+
+        if (links.length > 0) {
+          links.forEach(({ code, url, type }) =>
+            found.push({
+              code, url, type: type || "Server",
+              source: item.link || "https://google.com",
+              title: item.title || "Google result",
+              provider: "google",
+            })
+          );
+        } else {
+          // No code found in snippet — but the page itself might BE a share link
+          extractShareLinks(item.link || "").forEach(({ code, url, type }) =>
+            found.push({
+              code, url, type: type || "Server",
+              source: item.link,
+              title: item.title || "Google result",
+              provider: "google",
+            })
+          );
+        }
       }
-      // Respect Google's rate limit
       if (start < 21) await new Promise((r) => setTimeout(r, 500));
     }
+    console.log(`Google [${query}] total found: ${found.length}`);
     return found;
   } catch (e) {
     if (e.response?.status === 429) {
-      console.error("Google CSE: daily quota exceeded (100/day free limit).");
+      console.error("Google CSE: daily quota exceeded.");
     } else if (e.response?.status === 403) {
-      console.error("Google CSE: invalid key or API not enabled. Check YOUTUBE_API_KEY and GOOGLE_CX.");
+      console.error("Google CSE 403:", e.response?.data?.error?.message || "invalid key");
     } else {
       console.error(`Google search [${query}]:`, e.message);
     }
     return [];
   }
 }
+
+// ── /api/debug-google — paste your Railway URL + /api/debug-google to diagnose ──
+app.get("/api/debug-google", async (req, res) => {
+  const q = req.query.q || "steal a brainrot roblox";
+  if (!GOOGLE_CX || !GOOGLE_API_KEY) {
+    return res.json({ error: "Missing env vars", GOOGLE_CX: !!GOOGLE_CX, GOOGLE_API_KEY: !!GOOGLE_API_KEY });
+  }
+  try {
+    const response = await http.get("https://www.googleapis.com/customsearch/v1", {
+      params: { key: GOOGLE_API_KEY, cx: GOOGLE_CX, q, num: 10 },
+    });
+    res.json({
+      query: q,
+      cx: GOOGLE_CX,
+      totalResults: response.data?.searchInformation?.totalResults,
+      searchTime: response.data?.searchInformation?.formattedSearchTime,
+      items: (response.data?.items || []).map(i => ({
+        title: i.title,
+        link: i.link,
+        snippet: i.snippet,
+      })),
+    });
+  } catch (e) {
+    res.json({ error: e.message, status: e.response?.status, details: e.response?.data });
+  }
+});
 async function runBatch(tasks, batchSize = 2, delayMs = 1200) {
   const results = [];
   for (let i = 0; i < tasks.length; i += batchSize) {
@@ -309,9 +363,9 @@ async function findPrivateServers(customQuery = null) {
         // ── YouTube (only runs if YOUTUBE_API_KEY is set) ─────────────────────
         () => searchYoutube("steal a brainrot roblox private server code"),
         () => searchYoutube("steal a brainrot roblox.com/share"),
-        // ── Google Custom Search (only runs if GOOGLE_CX is set) ─────────────
-        () => searchGoogle("steal a brainrot roblox.com/share?code"),
-        () => searchGoogle("steal a brainrot roblox private server site:roblox.com/share"),
+        // ── Google Custom Search (only runs if GOOGLE_CX + GOOGLE_API_KEY set) ─
+        () => searchGoogle("steal a brainrot private server"),
+        () => searchGoogle("roblox.com/share steal a brainrot"),
       ];
 
   const allResults = await runBatch(tasks, 2, 1200);
