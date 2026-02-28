@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 3000;
 
 let cachedLinks = [];
 let lastFetch = null;
-const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_TTL = 0; // always fetch fresh — no caching
 
 // ── Deduplication: if a fetch is already in progress, queue callers ──────────
 let fetchInProgress = false;
