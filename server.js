@@ -221,8 +221,7 @@ async function searchYoutube(query) {
 // ║  Set env vars: YOUTUBE_API_KEY (already set) + GOOGLE_CX         ║
 // ╚══════════════════════════════════════════════════════════════════╝
 const GOOGLE_CX = process.env.GOOGLE_CX || null;
-// Reuses YOUTUBE_API_KEY as the Google API key — same project, same key
-const GOOGLE_API_KEY = process.env.YOUTUBE_API_KEY || null;
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || null;
 
 async function searchGoogle(query) {
   if (!GOOGLE_CX || !GOOGLE_API_KEY) return [];
