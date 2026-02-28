@@ -132,6 +132,89 @@ async function fetchSubredditNew(subreddit, limit = 100) {
   }
 }
 
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  PROVIDER: YOUTUBE DATA API v3                                   ║
+// ║  Free: 10,000 units/day — Search costs 100 units per call        ║
+// ║  Get a key at: console.cloud.google.com → YouTube Data API v3    ║
+// ║  Set env var: YOUTUBE_API_KEY                                     ║
+// ╚══════════════════════════════════════════════════════════════════╝
+const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || null;
+const YT_BASE = "https://www.googleapis.com/youtube/v3";
+
+async function searchYoutube(query) {
+  if (!YOUTUBE_API_KEY) return [];
+  try {
+    // Step 1: Search for relevant videos (100 units each)
+    const searchRes = await http.get(`${YT_BASE}/search`, {
+      params: {
+        part: "snippet",
+        q: query,
+        type: "video",
+        maxResults: 50,
+        order: "date",
+        key: YOUTUBE_API_KEY,
+      },
+    });
+
+    const items = searchRes.data?.items || [];
+    if (!items.length) return [];
+
+    const found = [];
+
+    // Step 2: Scan titles + truncated description snippets first (free, no extra units)
+    const videoIds = [];
+    for (const item of items) {
+      const s = item.snippet || {};
+      const combined = [s.title, s.description].filter(Boolean).join(" ");
+      extractShareLinks(combined).forEach(({ code, url, type }) =>
+        found.push({
+          code, url, type: type || "Server",
+          source: `https://www.youtube.com/watch?v=${item.id?.videoId}`,
+          title: s.title || "YouTube video",
+          provider: "youtube",
+        })
+      );
+      if (item.id?.videoId) videoIds.push(item.id.videoId);
+    }
+
+    // Step 3: Fetch full descriptions in one batch call (1 unit total — very cheap)
+    // YouTube snippets in search are truncated to ~100 chars; full descriptions are in /videos
+    if (videoIds.length > 0) {
+      const videosRes = await http.get(`${YT_BASE}/videos`, {
+        params: {
+          part: "snippet",
+          id: videoIds.join(","),
+          key: YOUTUBE_API_KEY,
+        },
+      });
+
+      for (const video of videosRes.data?.items || []) {
+        const desc = video.snippet?.description || "";
+        const title = video.snippet?.title || "YouTube video";
+        const videoUrl = `https://www.youtube.com/watch?v=${video.id}`;
+        extractShareLinks(desc).forEach(({ code, url, type }) =>
+          found.push({
+            code, url, type: type || "Server",
+            source: videoUrl,
+            title,
+            provider: "youtube",
+          })
+        );
+      }
+    }
+
+    return found;
+  } catch (e) {
+    // 403 = quota exceeded or key invalid — log clearly so the user knows
+    if (e.response?.status === 403) {
+      console.error("YouTube API error: quota exceeded or invalid key. Check YOUTUBE_API_KEY.");
+    } else {
+      console.error(`YouTube search [${query}]:`, e.message);
+    }
+    return [];
+  }
+}
+
 // Run searches in controlled batches to avoid hammering Reddit
 async function runBatch(tasks, batchSize = 2, delayMs = 1200) {
   const results = [];
@@ -150,14 +233,21 @@ async function runBatch(tasks, batchSize = 2, delayMs = 1200) {
 
 async function findPrivateServers(customQuery = null) {
   const tasks = customQuery
-    ? [() => searchReddit(customQuery), () => searchReddit(customQuery, "comment")]
+    ? [
+        () => searchReddit(customQuery),
+        () => searchReddit(customQuery, "comment"),
+        () => searchYoutube(customQuery + " roblox private server"),
+      ]
     : [
+        // ── Reddit posts ──────────────────────────────────────────────────────
         () => searchReddit("steal a brainrot roblox.com/share"),
         () => searchReddit("steal a brainrot private server roblox"),
         () => searchReddit("roblox share code steal brainrot"),
         () => searchReddit('roblox.com/share?code type=Server steal a brainrot'),
+        // ── Reddit comments ───────────────────────────────────────────────────
         () => searchReddit("steal a brainrot roblox.com/share", "comment"),
         () => searchReddit('roblox.com/share type=Server steal brainrot', "comment"),
+        // ── Subreddits ────────────────────────────────────────────────────────
         () => searchSubreddit("roblox", "steal a brainrot private server"),
         () => searchSubreddit("roblox", "steal a brainrot share code"),
         () => searchSubreddit("roblox", "roblox.com/share type=Server brainrot"),
@@ -165,6 +255,9 @@ async function findPrivateServers(customQuery = null) {
         () => searchSubreddit("StealaBrainrot1", "roblox.com/share"),
         () => searchSubreddit("StealaBrainrot1", "private server"),
         () => fetchSubredditNew("StealaBrainrot1"),
+        // ── YouTube (only runs if YOUTUBE_API_KEY is set) ─────────────────────
+        () => searchYoutube("steal a brainrot roblox private server code"),
+        () => searchYoutube("steal a brainrot roblox.com/share"),
       ];
 
   const allResults = await runBatch(tasks, 2, 1200);
@@ -253,11 +346,8 @@ app.get("/api/status", (req, res) => {
   res.json({
     status: "online",
     providers: {
-      bing: false,
-      google: false,
-      serpapi: false,
-      duckduckgo: false,
       reddit: true,
+      youtube: !!YOUTUBE_API_KEY,
     },
     cached: cachedLinks.length,
     lastFetch: lastFetch ? new Date(lastFetch).toISOString() : null,
