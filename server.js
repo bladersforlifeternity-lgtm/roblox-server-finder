@@ -10,17 +10,10 @@ app.use(express.static("public"));
 
 const PORT = process.env.PORT || 3000;
 
-// ─── Config ────────────────────────────────────────────────────────────────
-// Game ID for "Steal a Brainrot" on Roblox
-const GAME_NAME = "steal a brainrot";
-const SHARE_PATTERN = "roblox.com/share?code=";
-
-// ─── In-memory cache ────────────────────────────────────────────────────────
 let cachedLinks = [];
 let lastFetch = null;
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
 function extractShareCodes(text) {
   const regex = /roblox\.com\/share\?code=([A-Za-z0-9_-]+)/g;
   const codes = new Set();
@@ -31,216 +24,111 @@ function extractShareCodes(text) {
   return [...codes];
 }
 
-// ─── Search Providers ───────────────────────────────────────────────────────
-
-// 1. Bing Web Search API (requires BING_API_KEY env var)
-async function searchBing(query) {
-  const key = process.env.BING_API_KEY;
-  if (!key) return [];
-
+async function searchDuckDuckGo(query) {
   try {
-    const res = await axios.get("https://api.bing.microsoft.com/v7.0/search", {
-      headers: { "Ocp-Apim-Subscription-Key": key },
-      params: {
-        q: query,
-        count: 50,
-        responseFilter: "Webpages",
-        safeSearch: "Off",
-      },
-      timeout: 8000,
-    });
-
-    const pages = res.data?.webPages?.value || [];
-    const found = [];
-    for (const page of pages) {
-      const combined = (page.url || "") + " " + (page.snippet || "");
-      const codes = extractShareCodes(combined);
-      codes.forEach((code) =>
-        found.push({
-          code,
-          url: `https://www.roblox.com/share?code=${code}`,
-          source: page.url,
-          title: page.name,
-          provider: "bing",
-        })
-      );
-    }
-    return found;
-  } catch (e) {
-    console.error("Bing error:", e.message);
-    return [];
-  }
-}
-
-// 2. Google Custom Search API (requires GOOGLE_API_KEY + GOOGLE_CX env vars)
-async function searchGoogle(query) {
-  const key = process.env.GOOGLE_API_KEY;
-  const cx = process.env.GOOGLE_CX;
-  if (!key || !cx) return [];
-
-  try {
-    const res = await axios.get(
-      "https://www.googleapis.com/customsearch/v1",
-      {
-        params: { key, cx, q: query, num: 10 },
-        timeout: 8000,
+    // Step 1: get token
+    const tokenRes = await axios.post("https://duckduckgo.com/", 
+      `q=${encodeURIComponent(query)}`,
+      { 
+        headers: { 
+          "Content-Type": "application/x-www-form-urlencoded",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        },
+        timeout: 8000
       }
     );
+    
+    const vtc = tokenRes.data.match(/vqd=([\d-]+)/)?.[1];
+    if (!vtc) return [];
 
-    const items = res.data?.items || [];
-    const found = [];
-    for (const item of items) {
-      const combined =
-        (item.link || "") +
-        " " +
-        (item.snippet || "") +
-        " " +
-        (item.htmlSnippet || "");
-      const codes = extractShareCodes(combined);
-      codes.forEach((code) =>
-        found.push({
-          code,
-          url: `https://www.roblox.com/share?code=${code}`,
-          source: item.link,
-          title: item.title,
-          provider: "google",
-        })
-      );
-    }
-    return found;
-  } catch (e) {
-    console.error("Google error:", e.message);
-    return [];
-  }
-}
-
-// 3. SerpAPI fallback (requires SERPAPI_KEY env var)
-async function searchSerpApi(query) {
-  const key = process.env.SERPAPI_KEY;
-  if (!key) return [];
-
-  try {
-    const res = await axios.get("https://serpapi.com/search", {
-      params: { q: query, api_key: key, num: 50 },
-      timeout: 10000,
+    // Step 2: search
+    const searchRes = await axios.get("https://links.duckduckgo.com/d.js", {
+      params: { q: query, vqd: vtc, p: 1 },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      },
+      timeout: 8000
     });
 
-    const results = res.data?.organic_results || [];
     const found = [];
-    for (const r of results) {
-      const combined = (r.link || "") + " " + (r.snippet || "");
+    const data = searchRes.data;
+    const urlRegex = /"u":"([^"]+)"/g;
+    const snippetRegex = /"a":"([^"]+)"/g;
+    
+    let urlMatch, snippetMatch;
+    const urls = [];
+    const snippets = [];
+    
+    while ((urlMatch = urlRegex.exec(data)) !== null) urls.push(urlMatch[1]);
+    while ((snippetMatch = snippetRegex.exec(data)) !== null) snippets.push(snippetMatch[1]);
+
+    for (let i = 0; i < urls.length; i++) {
+      const combined = urls[i] + " " + (snippets[i] || "");
       const codes = extractShareCodes(combined);
-      codes.forEach((code) =>
-        found.push({
-          code,
-          url: `https://www.roblox.com/share?code=${code}`,
-          source: r.link,
-          title: r.title,
-          provider: "serpapi",
-        })
-      );
+      codes.forEach(code => found.push({
+        code,
+        url: `https://www.roblox.com/share?code=${code}`,
+        source: urls[i],
+        title: urls[i],
+        provider: "duckduckgo"
+      }));
     }
     return found;
   } catch (e) {
-    console.error("SerpAPI error:", e.message);
+    console.error("DDG error:", e.message);
     return [];
   }
 }
 
-// ─── Core Search Logic ──────────────────────────────────────────────────────
 async function findPrivateServers(customQuery = null) {
-  const queries = customQuery
-    ? [customQuery]
-    : [
-        `site:twitter.com "${SHARE_PATTERN}" "${GAME_NAME}"`,
-        `site:reddit.com "${SHARE_PATTERN}" "${GAME_NAME}"`,
-        `"roblox.com/share?code=" "steal a brainrot" private server`,
-        `roblox private server steal brainrot "share?code="`,
-        `"steal a brainrot" roblox server link 2024`,
-        `"steal a brainrot" roblox server link 2025`,
-      ];
+  const queries = customQuery ? [customQuery] : [
+    `site:twitter.com "roblox.com/share?code=" "steal a brainrot"`,
+    `site:reddit.com "roblox.com/share?code=" "steal a brainrot"`,
+    `"roblox.com/share?code=" "steal a brainrot" private server`,
+    `roblox "steal a brainrot" private server link 2025`,
+    `"steal a brainrot" roblox server "share?code="`,
+  ];
 
   const allResults = [];
-
   for (const query of queries) {
-    const [bingRes, googleRes, serpRes] = await Promise.allSettled([
-      searchBing(query),
-      searchGoogle(query),
-      searchSerpApi(query),
-    ]);
-
-    for (const res of [bingRes, googleRes, serpRes]) {
-      if (res.status === "fulfilled") allResults.push(...res.value);
-    }
+    const results = await searchDuckDuckGo(query);
+    allResults.push(...results);
+    await new Promise(r => setTimeout(r, 1000)); // avoid rate limiting
   }
 
-  // Deduplicate by code
   const seen = new Map();
   for (const r of allResults) {
     if (!seen.has(r.code)) seen.set(r.code, r);
   }
-
   return [...seen.values()];
 }
 
-// ─── Routes ─────────────────────────────────────────────────────────────────
-
-// GET /api/servers — main endpoint
 app.get("/api/servers", async (req, res) => {
   const forceRefresh = req.query.refresh === "true";
   const customQuery = req.query.q || null;
 
-  if (
-    !forceRefresh &&
-    !customQuery &&
-    cachedLinks.length > 0 &&
-    lastFetch &&
-    Date.now() - lastFetch < CACHE_TTL
-  ) {
-    return res.json({
-      success: true,
-      count: cachedLinks.length,
-      cached: true,
-      lastFetch: new Date(lastFetch).toISOString(),
-      results: cachedLinks,
-    });
+  if (!forceRefresh && !customQuery && cachedLinks.length > 0 && lastFetch && Date.now() - lastFetch < CACHE_TTL) {
+    return res.json({ success: true, count: cachedLinks.length, cached: true, lastFetch: new Date(lastFetch).toISOString(), results: cachedLinks });
   }
 
   try {
     const results = await findPrivateServers(customQuery);
-
-    if (!customQuery) {
-      cachedLinks = results;
-      lastFetch = Date.now();
-    }
-
-    res.json({
-      success: true,
-      count: results.length,
-      cached: false,
-      lastFetch: new Date().toISOString(),
-      results,
-    });
+    if (!customQuery) { cachedLinks = results; lastFetch = Date.now(); }
+    res.json({ success: true, count: results.length, cached: false, lastFetch: new Date().toISOString(), results });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// GET /api/status — health check + config status
 app.get("/api/status", (req, res) => {
   res.json({
     status: "online",
-    providers: {
-      bing: !!process.env.BING_API_KEY,
-      google: !!(process.env.GOOGLE_API_KEY && process.env.GOOGLE_CX),
-      serpapi: !!process.env.SERPAPI_KEY,
-    },
+    providers: { bing: false, google: false, serpapi: false, duckduckgo: true },
     cached: cachedLinks.length,
     lastFetch: lastFetch ? new Date(lastFetch).toISOString() : null,
   });
 });
 
-// GET / — serve frontend
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
