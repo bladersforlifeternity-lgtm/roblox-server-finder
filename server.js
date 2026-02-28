@@ -26,7 +26,8 @@ let fetchQueue = [];
 const SHARE_REGEX = /(?:https?:\/\/)?(?:www\.)?roblox\.com\/share\?code=([A-Za-z0-9_\-]+)(?:&type=([A-Za-z0-9_\-]+))?/gi;
 
 function extractShareLinks(text) {
-  const seen = new Map(); // code → full entry
+  if (!text) return [];
+  const seen = new Map();
   let match;
   SHARE_REGEX.lastIndex = 0;
   while ((match = SHARE_REGEX.exec(text)) !== null) {
@@ -117,6 +118,20 @@ async function searchSubreddit(subreddit, query) {
   }
 }
 
+// Fetch the raw /new feed of a subreddit — catches posts with no keywords at all
+async function fetchSubredditNew(subreddit, limit = 100) {
+  try {
+    const data = await redditGet(
+      `https://www.reddit.com/r/${subreddit}/new.json`,
+      { limit }
+    );
+    return parsePosts(data?.data?.children || []);
+  } catch (e) {
+    console.error(`Subreddit r/${subreddit} /new error:`, e.message);
+    return [];
+  }
+}
+
 // Run searches in controlled batches to avoid hammering Reddit
 async function runBatch(tasks, batchSize = 2, delayMs = 1200) {
   const results = [];
@@ -147,6 +162,9 @@ async function findPrivateServers(customQuery = null) {
         () => searchSubreddit("roblox", "steal a brainrot share code"),
         () => searchSubreddit("roblox", "roblox.com/share type=Server brainrot"),
         () => searchSubreddit("RobloxHelp", "steal a brainrot"),
+        () => searchSubreddit("StealaBrainrot1", "roblox.com/share"),
+        () => searchSubreddit("StealaBrainrot1", "private server"),
+        () => fetchSubredditNew("StealaBrainrot1"),
       ];
 
   const allResults = await runBatch(tasks, 2, 1200);
