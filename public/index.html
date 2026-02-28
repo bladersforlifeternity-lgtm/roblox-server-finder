@@ -279,7 +279,6 @@
   <div class="controls">
     <input type="text" id="queryInput" placeholder='Custom query (leave empty for default search)' />
     <button class="btn-primary" id="searchBtn" onclick="doSearch()">🔍 Find Servers</button>
-    <button class="btn-secondary" id="refreshBtn" onclick="doSearch(true)">↺ Refresh</button>
   </div>
 
   <!-- Thin progress bar -->
@@ -365,7 +364,7 @@ async function loadStatus() {
 }
 
 // ── Main search ───────────────────────────────────────────────────────────────
-async function doSearch(refresh = false) {
+async function doSearch() {
   if (searchLocked) return;
   searchLocked = true;
 
@@ -373,14 +372,12 @@ async function doSearch(refresh = false) {
   activeController = new AbortController();
 
   const btn     = document.getElementById('searchBtn');
-  const refBtn  = document.getElementById('refreshBtn');
   const loading = document.getElementById('loading');
   const resultsSection = document.getElementById('resultsSection');
   const emptyState = document.getElementById('emptyState');
   const query = document.getElementById('queryInput').value.trim();
 
   btn.disabled = true;
-  refBtn.disabled = true;
   loading.classList.add('show');
   resultsSection.style.display = 'none';
   emptyState.classList.remove('show');
@@ -402,8 +399,7 @@ async function doSearch(refresh = false) {
 
   try {
     let url = '/api/servers';
-    const params = [];
-    if (refresh) params.push('refresh=true');
+    const params = ['refresh=true']; // always fetch fresh — never serve cache
     if (query) params.push('q=' + encodeURIComponent(query));
     if (params.length) url += '?' + params.join('&');
 
@@ -438,7 +434,6 @@ async function doSearch(refresh = false) {
     }
   } finally {
     btn.disabled = false;
-    refBtn.disabled = false;
     searchLocked = false;
   }
 }
@@ -496,9 +491,8 @@ function renderResults(results) {
   document.getElementById('countReddit').textContent  = counts.reddit;
   document.getElementById('countYoutube').textContent = counts.youtube;
 
-  // Show filter bar only if there are multiple providers present
-  const hasMultiple = counts.reddit > 0 && counts.youtube > 0;
-  document.getElementById('filterBar').classList.toggle('show', hasMultiple);
+  // Show filter bar whenever there are results (even if only one provider)
+  document.getElementById('filterBar').classList.toggle('show', results.length > 0);
 
   // Reset to 'all' on fresh results
   activeFilter = 'all';
