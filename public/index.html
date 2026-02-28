@@ -191,6 +191,7 @@
   .card-source { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .card-provider { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-family: 'Space Mono', monospace; flex-shrink: 0; }
   .card-provider.reddit { background: rgba(255,69,0,0.15); color: #ff8c5a; border: 1px solid rgba(255,69,0,0.3); }
+
   .btn-join {
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     color: white; border: none; border-radius: 8px;
@@ -275,8 +276,8 @@
 
 <script>
 let currentResults = [];
-let activeController = null; // AbortController for the current fetch
-let searchLocked = false;    // prevents concurrent requests
+let activeController = null;
+let searchLocked = false;
 let progressTimer = null;
 
 // ── Simulated progress bar ────────────────────────────────────────────────────
@@ -287,7 +288,6 @@ function startProgress() {
   let pct = 0;
   bar.style.width = '0%';
   clearInterval(progressTimer);
-  // Advance quickly to 80%, then slow way down (indeterminate feel)
   progressTimer = setInterval(() => {
     if (pct < 80) pct += Math.random() * 6;
     else if (pct < 95) pct += 0.2;
@@ -313,9 +313,9 @@ async function loadStatus() {
     const anyActive = d.providers.bing || d.providers.google || d.providers.serpapi || d.providers.duckduckgo;
     if (!anyActive) document.getElementById('warnBox').classList.add('show');
 
-    if (d.providers.bing)       { const p = document.getElementById('pillBing');   p.textContent = 'Bing ✓';    p.className = 'pill active'; }
-    if (d.providers.google)     { const p = document.getElementById('pillGoogle'); p.textContent = 'Google ✓';  p.className = 'pill active'; }
-    if (d.providers.serpapi)    { const p = document.getElementById('pillSerp');   p.textContent = 'SerpAPI ✓'; p.className = 'pill active'; }
+    if (d.providers.bing)    { const p = document.getElementById('pillBing');   p.textContent = 'Bing ✓';    p.className = 'pill active'; }
+    if (d.providers.google)  { const p = document.getElementById('pillGoogle'); p.textContent = 'Google ✓';  p.className = 'pill active'; }
+    if (d.providers.serpapi) { const p = document.getElementById('pillSerp');   p.textContent = 'SerpAPI ✓'; p.className = 'pill active'; }
     if (d.lastFetch) document.getElementById('lastFetch').textContent = 'Last: ' + new Date(d.lastFetch).toLocaleTimeString();
   } catch(e) {
     document.getElementById('statusText').textContent = 'Offline';
@@ -325,11 +325,9 @@ async function loadStatus() {
 
 // ── Main search ───────────────────────────────────────────────────────────────
 async function doSearch(refresh = false) {
-  // Hard guard: one request at a time
   if (searchLocked) return;
   searchLocked = true;
 
-  // Cancel any lingering previous fetch
   if (activeController) activeController.abort();
   activeController = new AbortController();
 
@@ -347,7 +345,6 @@ async function doSearch(refresh = false) {
   emptyState.classList.remove('show');
   startProgress();
 
-  // Cycle loading messages to show progress
   const messages = [
     'Scanning Reddit for private servers…',
     'Searching r/roblox…',
@@ -385,18 +382,15 @@ async function doSearch(refresh = false) {
       renderResults(currentResults);
     }
 
-    if (d.lastFetch) {
+    if (d.lastFetch)
       document.getElementById('lastFetch').textContent = 'Last: ' + new Date(d.lastFetch).toLocaleTimeString();
-    }
     document.getElementById('statusText').textContent = 'API Online';
+
   } catch(e) {
     clearInterval(msgTimer);
     finishProgress();
     loading.classList.remove('show');
-
-    if (e.name === 'AbortError') {
-      // Silently swallow aborted requests
-    } else {
+    if (e.name !== 'AbortError') {
       emptyState.innerHTML = `<div class="empty-icon">⚠️</div><p>Error: ${e.message}</p>`;
       emptyState.classList.add('show');
     }
@@ -408,38 +402,81 @@ async function doSearch(refresh = false) {
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
+function safeText(str) {
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
 function renderResults(results) {
-  const grid = document.getElementById('resultsGrid');
+  const grid  = document.getElementById('resultsGrid');
   const badge = document.getElementById('countBadge');
   badge.textContent = results.length + ' server' + (results.length !== 1 ? 's' : '') + ' found';
   grid.innerHTML = '';
+
   results.forEach((r, i) => {
-    const sourceHost = (() => { try { return new URL(r.source).hostname; } catch(_) { return 'unknown'; } })();
-    const typeBadge = r.type
-      ? `<span style="font-family:'Space Mono',monospace;font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(58,255,180,0.1);color:var(--green);border:1px solid rgba(58,255,180,0.25);flex-shrink:0;">${r.type}</span>`
-      : '';
-    card.innerHTML = `
-      <div class="card-icon">🔗</div>
-      <div class="card-body">
-        <div class="card-code">${r.url}</div>
-        <div class="card-source">via ${sourceHost} · ${r.title || ''}</div>
-      </div>
-      ${typeBadge}
-      <span class="card-provider ${r.provider || 'reddit'}">${r.provider || 'reddit'}</span>
-      <a class="btn-join" href="${r.url}" target="_blank" rel="noopener">Join →</a>
-    `;
+    let sourceHost = 'unknown';
+    try { sourceHost = new URL(r.source).hostname; } catch(_) {}
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.animationDelay = (i * 40) + 'ms';
+
+    // Icon
+    const icon = document.createElement('div');
+    icon.className = 'card-icon';
+    icon.textContent = '🔗';
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'card-body';
+
+    const code = document.createElement('div');
+    code.className = 'card-code';
+    code.textContent = r.url;
+
+    const source = document.createElement('div');
+    source.className = 'card-source';
+    source.textContent = 'via ' + sourceHost + ' · ' + (r.title || '');
+
+    body.appendChild(code);
+    body.appendChild(source);
+
+    // Type badge
+    const typeBadge = document.createElement('span');
+    typeBadge.textContent = r.type || 'Server';
+    typeBadge.style.cssText = "font-family:'Space Mono',monospace;font-size:10px;padding:2px 8px;border-radius:4px;background:rgba(58,255,180,0.1);color:var(--green);border:1px solid rgba(58,255,180,0.25);flex-shrink:0;";
+
+    // Provider badge
+    const providerBadge = document.createElement('span');
+    providerBadge.className = 'card-provider ' + (r.provider || 'reddit');
+    providerBadge.textContent = r.provider || 'reddit';
+
+    // Join button
+    const joinBtn = document.createElement('a');
+    joinBtn.className = 'btn-join';
+    joinBtn.href = r.url;
+    joinBtn.target = '_blank';
+    joinBtn.rel = 'noopener';
+    joinBtn.textContent = 'Join →';
+
+    card.appendChild(icon);
+    card.appendChild(body);
+    card.appendChild(typeBadge);
+    card.appendChild(providerBadge);
+    card.appendChild(joinBtn);
     grid.appendChild(card);
   });
+
   document.getElementById('resultsSection').style.display = 'block';
 }
 
 function copyAll() {
   if (!currentResults.length) return;
-  const text = currentResults.map(r => r.url).join('\n');
-  navigator.clipboard.writeText(text).then(() => alert('Copied ' + currentResults.length + ' links!'));
+  navigator.clipboard.writeText(currentResults.map(r => r.url).join('\n'))
+    .then(() => alert('Copied ' + currentResults.length + ' links!'));
 }
 
-// ── Enter key to search ───────────────────────────────────────────────────────
 document.getElementById('queryInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') doSearch();
 });
