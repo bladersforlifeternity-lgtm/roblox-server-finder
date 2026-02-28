@@ -193,6 +193,46 @@
   .card-provider.reddit  { background: rgba(255,69,0,0.15);  color: #ff8c5a; border: 1px solid rgba(255,69,0,0.3); }
   .card-provider.youtube { background: rgba(255,0,0,0.15);   color: #ff6b6b; border: 1px solid rgba(255,0,0,0.3); }
 
+  /* ── Filter bar ──────────────────────────────────────────────────────────── */
+  .filter-bar {
+    display: none;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .filter-bar.show { display: flex; }
+  .filter-label {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-right: 4px;
+  }
+  .filter-btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active-all     { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; color: white; }
+  .filter-btn.active-reddit  { background: rgba(255,69,0,0.2);  border-color: #ff8c5a; color: #ff8c5a; }
+  .filter-btn.active-youtube { background: rgba(255,0,0,0.2);   border-color: #ff6b6b; color: #ff6b6b; }
+  .filter-count {
+    font-family: 'Space Mono', monospace;
+    font-size: 10px;
+    background: rgba(255,255,255,0.08);
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 4px;
+  }
+
   .btn-join {
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     color: white; border: none; border-radius: 8px;
@@ -256,7 +296,14 @@
   <div id="resultsSection" style="display:none">
     <div class="results-header">
       <span class="count-badge" id="countBadge">0 servers found</span>
-      <button class="sort-btn" onclick="copyAll()">📋 Copy all codes</button>
+      <button class="sort-btn" onclick="copyAll()">📋 Copy all links</button>
+    </div>
+    <!-- Filter bar -->
+    <div class="filter-bar" id="filterBar">
+      <span class="filter-label">Filter:</span>
+      <button class="filter-btn active-all" id="filterAll"     onclick="setFilter('all')">All <span class="filter-count" id="countAll">0</span></button>
+      <button class="filter-btn"            id="filterReddit"  onclick="setFilter('reddit')">🔴 Reddit <span class="filter-count" id="countReddit">0</span></button>
+      <button class="filter-btn"            id="filterYoutube" onclick="setFilter('youtube')">▶️ YouTube <span class="filter-count" id="countYoutube">0</span></button>
     </div>
     <div class="results-grid" id="resultsGrid"></div>
   </div>
@@ -272,6 +319,7 @@ let currentResults = [];
 let activeController = null;
 let searchLocked = false;
 let progressTimer = null;
+let activeFilter = 'all';
 
 // ── Simulated progress bar ────────────────────────────────────────────────────
 function startProgress() {
@@ -395,6 +443,40 @@ async function doSearch(refresh = false) {
   }
 }
 
+// ── Filter ────────────────────────────────────────────────────────────────────
+function setFilter(f) {
+  activeFilter = f;
+
+  // Update button active states
+  document.getElementById('filterAll').className     = 'filter-btn' + (f === 'all'     ? ' active-all'     : '');
+  document.getElementById('filterReddit').className  = 'filter-btn' + (f === 'reddit'  ? ' active-reddit'  : '');
+  document.getElementById('filterYoutube').className = 'filter-btn' + (f === 'youtube' ? ' active-youtube' : '');
+
+  applyFilter();
+}
+
+function applyFilter() {
+  const filtered = activeFilter === 'all'
+    ? currentResults
+    : currentResults.filter(r => r.provider === activeFilter);
+
+  const badge = document.getElementById('countBadge');
+  badge.textContent = filtered.length + ' server' + (filtered.length !== 1 ? 's' : '') + ' found';
+
+  buildCards(filtered);
+
+  // Show empty state if filter yields nothing
+  const empty = document.getElementById('emptyState');
+  if (filtered.length === 0 && currentResults.length > 0) {
+    empty.innerHTML = '<div class="empty-icon">🔍</div><p>No ' + activeFilter + ' results found.</p>';
+    empty.classList.add('show');
+    document.getElementById('resultsGrid').style.display = 'none';
+  } else {
+    empty.classList.remove('show');
+    document.getElementById('resultsGrid').style.display = '';
+  }
+}
+
 // ── Render ────────────────────────────────────────────────────────────────────
 function safeText(str) {
   const d = document.createElement('div');
@@ -403,9 +485,30 @@ function safeText(str) {
 }
 
 function renderResults(results) {
-  const grid  = document.getElementById('resultsGrid');
   const badge = document.getElementById('countBadge');
   badge.textContent = results.length + ' server' + (results.length !== 1 ? 's' : '') + ' found';
+
+  // Count per provider
+  const counts = { all: results.length, reddit: 0, youtube: 0 };
+  results.forEach(r => { if (counts[r.provider] !== undefined) counts[r.provider]++; });
+
+  document.getElementById('countAll').textContent     = counts.all;
+  document.getElementById('countReddit').textContent  = counts.reddit;
+  document.getElementById('countYoutube').textContent = counts.youtube;
+
+  // Show filter bar only if there are multiple providers present
+  const hasMultiple = counts.reddit > 0 && counts.youtube > 0;
+  document.getElementById('filterBar').classList.toggle('show', hasMultiple);
+
+  // Reset to 'all' on fresh results
+  activeFilter = 'all';
+  setFilter('all');
+
+  document.getElementById('resultsSection').style.display = 'block';
+}
+
+function buildCards(results) {
+  const grid = document.getElementById('resultsGrid');
   grid.innerHTML = '';
 
   results.forEach((r, i) => {
@@ -414,12 +517,12 @@ function renderResults(results) {
 
     const card = document.createElement('div');
     card.className = 'card';
-    card.style.animationDelay = (i * 40) + 'ms';
+    card.style.animationDelay = (i * 35) + 'ms';
 
     // Icon
     const icon = document.createElement('div');
     icon.className = 'card-icon';
-    icon.textContent = '🔗';
+    icon.textContent = r.provider === 'youtube' ? '▶️' : '🔗';
 
     // Body
     const body = document.createElement('div');
@@ -461,14 +564,15 @@ function renderResults(results) {
     card.appendChild(joinBtn);
     grid.appendChild(card);
   });
-
-  document.getElementById('resultsSection').style.display = 'block';
 }
 
 function copyAll() {
   if (!currentResults.length) return;
-  navigator.clipboard.writeText(currentResults.map(r => r.url).join('\n'))
-    .then(() => alert('Copied ' + currentResults.length + ' links!'));
+  const filtered = activeFilter === 'all'
+    ? currentResults
+    : currentResults.filter(r => r.provider === activeFilter);
+  navigator.clipboard.writeText(filtered.map(r => r.url).join('\n'))
+    .then(() => alert('Copied ' + filtered.length + ' links!'));
 }
 
 document.getElementById('queryInput').addEventListener('keydown', (e) => {
