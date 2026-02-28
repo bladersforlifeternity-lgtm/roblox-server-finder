@@ -190,7 +190,8 @@
   .card-code { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--green); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .card-source { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .card-provider { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-family: 'Space Mono', monospace; flex-shrink: 0; }
-  .card-provider.reddit { background: rgba(255,69,0,0.15); color: #ff8c5a; border: 1px solid rgba(255,69,0,0.3); }
+  .card-provider.reddit  { background: rgba(255,69,0,0.15);  color: #ff8c5a; border: 1px solid rgba(255,69,0,0.3); }
+  .card-provider.youtube { background: rgba(255,0,0,0.15);   color: #ff6b6b; border: 1px solid rgba(255,0,0,0.3); }
 
   .btn-join {
     background: linear-gradient(135deg, var(--accent), var(--accent2));
@@ -225,22 +226,14 @@
   <header>
     <div class="tag">🔍 Roblox · Private Server Scanner</div>
     <h1>Steal a Brainrot<br/>Server Finder</h1>
-    <p>Scans the web for publicly shared private server links</p>
+    <p>Scans Reddit &amp; YouTube for publicly shared private server links</p>
   </header>
 
   <div class="status-bar" id="statusBar">
     <span><span class="status-dot" id="statusDot"></span><span id="statusText" style="font-family:'Space Mono',monospace;font-size:12px;">checking...</span></span>
-    <span class="pill" id="pillBing">Bing ✗</span>
-    <span class="pill" id="pillGoogle">Google ✗</span>
-    <span class="pill" id="pillSerp">SerpAPI ✗</span>
     <span class="pill active" id="pillReddit">Reddit ✓</span>
+    <span class="pill" id="pillYoutube">YouTube ✗</span>
     <span style="margin-left:auto;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)" id="lastFetch">—</span>
-  </div>
-
-  <div class="warn-box" id="warnBox">
-    <strong>⚠ No Search API Keys Configured</strong>
-    Add at least one API key as an environment variable on Railway:<br/>
-    BING_API_KEY · GOOGLE_API_KEY + GOOGLE_CX · SERPAPI_KEY
   </div>
 
   <div class="controls">
@@ -310,12 +303,12 @@ async function loadStatus() {
     document.getElementById('statusDot').className = 'status-dot on';
     document.getElementById('statusText').textContent = d.fetchInProgress ? 'Fetching…' : 'API Online';
 
-    const anyActive = d.providers.bing || d.providers.google || d.providers.serpapi || d.providers.duckduckgo;
-    if (!anyActive) document.getElementById('warnBox').classList.add('show');
+    if (d.providers.youtube) {
+      const p = document.getElementById('pillYoutube');
+      p.textContent = 'YouTube ✓';
+      p.className = 'pill active';
+    }
 
-    if (d.providers.bing)    { const p = document.getElementById('pillBing');   p.textContent = 'Bing ✓';    p.className = 'pill active'; }
-    if (d.providers.google)  { const p = document.getElementById('pillGoogle'); p.textContent = 'Google ✓';  p.className = 'pill active'; }
-    if (d.providers.serpapi) { const p = document.getElementById('pillSerp');   p.textContent = 'SerpAPI ✓'; p.className = 'pill active'; }
     if (d.lastFetch) document.getElementById('lastFetch').textContent = 'Last: ' + new Date(d.lastFetch).toLocaleTimeString();
   } catch(e) {
     document.getElementById('statusText').textContent = 'Offline';
@@ -347,8 +340,9 @@ async function doSearch(refresh = false) {
 
   const messages = [
     'Scanning Reddit for private servers…',
-    'Searching r/roblox…',
-    'Checking r/RobloxHelp…',
+    'Searching r/roblox & r/RobloxHelp…',
+    'Checking r/StealaBrainrot1…',
+    'Scanning YouTube descriptions…',
     'Parsing share codes…',
     'Almost there…',
   ];
