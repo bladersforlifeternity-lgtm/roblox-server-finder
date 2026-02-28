@@ -351,15 +351,16 @@ async function loadStatus() {
     document.getElementById('statusDot').className = 'status-dot on';
     document.getElementById('statusText').textContent = 'API Online';
 
-    const anyActive = d.providers.bing || d.providers.google || d.providers.serpapi;
+    const anyActive = d.providers.bing || d.providers.google || d.providers.serpapi || d.providers.duckduckgo;
     if (!anyActive) document.getElementById('warnBox').classList.add('show');
 
     const pb = document.getElementById('pillBing');
     const pg = document.getElementById('pillGoogle');
     const ps = document.getElementById('pillSerp');
-    if (d.providers.bing)    { pb.textContent = 'Bing ✓'; pb.className = 'pill active'; }
-    if (d.providers.google)  { pg.textContent = 'Google ✓'; pg.className = 'pill active'; }
-    if (d.providers.serpapi) { ps.textContent = 'SerpAPI ✓'; ps.className = 'pill active'; }
+    if (d.providers.bing)        { pb.textContent = 'Bing ✓'; pb.className = 'pill active'; }
+    if (d.providers.google)      { pg.textContent = 'Google ✓'; pg.className = 'pill active'; }
+    if (d.providers.serpapi)     { ps.textContent = 'SerpAPI ✓'; ps.className = 'pill active'; }
+    if (d.providers.duckduckgo)  { pb.textContent = 'DDG ✓'; pb.className = 'pill active'; }
 
     if (d.lastFetch) document.getElementById('lastFetch').textContent = 'Last: ' + new Date(d.lastFetch).toLocaleTimeString();
     if (d.cached > 0) document.getElementById('countBadge').textContent = d.cached + ' cached';
