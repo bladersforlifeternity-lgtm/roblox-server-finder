@@ -593,8 +593,30 @@ app.get("/api/servers", async (req, res) => {
 });
 
 // ── /api/search-stream — Server-Sent Events live log feed ────────────────────
+// Known scrapeable sites — must match frontend KNOWN_SITES
+const SITE_MAP = new Map([
+  ['gamerant.com',          'https://gamerant.com/steal-a-brainrot-private-server-links-roblox/'],
+  ['progameguides.com',     'https://progameguides.com/roblox/steal-a-brainrot-private-server-links/'],
+  ['gamertweak.com',        'https://gamertweak.com/steal-a-brainrot-roblox-private-server-links/'],
+  ['deltiasgaming.com',     'https://deltiasgaming.com/all-working-roblox-steal-a-brainrot-private-server-links/'],
+  ['techwiser.com',         'https://techwiser.com/steal-a-brainrot-private-servers-links-how-join/'],
+  ['thegamer.com',          'https://www.thegamer.com/roblox-steal-a-brainrot-private-server-links-how-to-create-prive-server-guide/'],
+  ['scriptrot.com',         'https://scriptrot.com/steal-a-brainrot-private-server-link/'],
+  ['rosenberryrooms.com',   'https://www.rosenberryrooms.com/steal-a-brainrot-private-servers-links/'],
+  ['findingdulcinea.com',   'https://findingdulcinea.com/steal-a-brainrot-private-server-links/'],
+  ['allthings.how',         'https://allthings.how/how-to-use-steal-a-brainrot-private-servers-in-january-2026/'],
+  ['boundbyflame.com',      'https://boundbyflame.com/private-server-links-in-steal-a-brainrot/'],
+  ['pocketgamer.com',       'https://www.pocketgamer.com/steal-a-brainrot/private-server-links/'],
+  ['gameskeys.net',         'https://gameskeys.net/steal-a-brainrot-private-server-links/'],
+  ['gamesatlas.net',        'https://www.gamesatlas.net/roblox/steal-a-brainrot-private-server-links/'],
+  ['sportskeeda.com',       'https://www.sportskeeda.com/roblox/steal-a-brainrot-private-server-links'],
+  ['stealabrainrot.fandom.com', 'fandom'],
+  ['fandom.com',            'fandom'],
+]);
+
 app.get("/api/search-stream", async (req, res) => {
-  const customQuery = req.query.q || null;
+  const rawQuery   = (req.query.q    || "").trim();
+  const rawSite    = (req.query.site || "").trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -605,76 +627,121 @@ app.get("/api/search-stream", async (req, res) => {
     res.write(`data: ${JSON.stringify({ type, msg, ...data })}\n\n`);
   };
 
-  emit("log", "🚀 Starting search...", { icon: "start" });
+  emit("log", "🚀 Starting search...", { status: "start" });
 
   const allResults = [];
   const seen = new Map();
 
-  const addResults = (items, source) => {
-    let newCount = 0;
+  const addResults = (items) => {
+    let n = 0;
     for (const r of items) {
-      if (!seen.has(r.code)) {
-        seen.set(r.code, r);
-        allResults.push(r);
-        newCount++;
-      }
+      if (!seen.has(r.code)) { seen.set(r.code, r); allResults.push(r); n++; }
     }
-    return newCount;
+    return n;
   };
 
-  // ── Helper to run a named task and emit log ──────────────────────────────
   const runTask = async (label, icon, fn) => {
     emit("log", `${icon} ${label}...`, { status: "running" });
     try {
       const results = await fn();
-      const n = addResults(results, label);
-      if (n > 0) {
-        emit("log", `${icon} ${label} → found ${n} link${n !== 1 ? "s" : ""}`, { status: "found", count: n });
-      } else {
-        emit("log", `${icon} ${label} → nothing found`, { status: "empty" });
-      }
+      const n = addResults(results);
+      emit("log", `${icon} ${label} → ${n > 0 ? `found ${n} link${n !== 1 ? "s" : ""}` : "nothing found"}`,
+        { status: n > 0 ? "found" : "empty", count: n });
     } catch (e) {
       emit("log", `${icon} ${label} → error: ${e.message}`, { status: "error" });
     }
   };
 
-  const tasks = customQuery ? [
-    () => runTask(`Reddit: "${customQuery}"`,       "🔴", () => searchReddit(customQuery)),
-    () => runTask(`Reddit comments: "${customQuery}"`, "🔴", () => searchReddit(customQuery, "comment")),
-    () => runTask("YouTube",                        "▶️",  () => searchYoutube(customQuery + " roblox private server")),
-    () => runTask("Google",                         "🔵", () => searchGoogle(customQuery + " roblox.com/share")),
-  ] : [
-    () => runTask("Reddit: steal a brainrot share",  "🔴", () => searchReddit("steal a brainrot roblox.com/share")),
-    () => runTask("Reddit: private server roblox",   "🔴", () => searchReddit("steal a brainrot private server roblox")),
-    () => runTask("Reddit: share code brainrot",     "🔴", () => searchReddit("roblox share code steal brainrot")),
-    () => runTask("Reddit: type=Server",             "🔴", () => searchReddit("roblox.com/share?code type=Server steal a brainrot")),
-    () => runTask("Reddit comments: share links",    "🔴", () => searchReddit("steal a brainrot roblox.com/share", "comment")),
-    () => runTask("Reddit comments: type=Server",    "🔴", () => searchReddit("roblox.com/share type=Server steal brainrot", "comment")),
-    () => runTask("r/roblox: private server",        "🔴", () => searchSubreddit("roblox", "steal a brainrot private server")),
-    () => runTask("r/roblox: share code",            "🔴", () => searchSubreddit("roblox", "steal a brainrot share code")),
-    () => runTask("r/RobloxHelp",                    "🔴", () => searchSubreddit("RobloxHelp", "steal a brainrot")),
-    () => runTask("r/StealaBrainrot1: share links",  "🔴", () => searchSubreddit("StealaBrainrot1", "roblox.com/share")),
-    () => runTask("r/StealaBrainrot1: private server","🔴",() => searchSubreddit("StealaBrainrot1", "private server")),
-    () => runTask("r/StealaBrainrot1: /new feed",    "🔴", () => fetchSubredditNew("StealaBrainrot1")),
-    () => runTask("YouTube: server codes",           "▶️",  () => searchYoutube("steal a brainrot roblox private server code")),
-    () => runTask("YouTube: share links",            "▶️",  () => searchYoutube("steal a brainrot roblox.com/share")),
-    () => runTask("Google: private server",          "🔵", () => searchGoogle("steal a brainrot private server")),
-    () => runTask("Google: share links",             "🔵", () => searchGoogle("roblox.com/share steal a brainrot")),
-    ...GUIDE_SITES.map(url => {
-      const name = new URL(url).hostname.replace("www.", "");
-      return () => runTask(name, "🌐", () => scrapeGuideSite(url));
-    }),
-    () => runTask("Fandom wiki",                     "📖", () => scrapeFandom()),
-  ];
+  let tasks = [];
 
-  // Run in batches of 2 with delay between batches
+  // ── SITE-SPECIFIC SEARCH ─────────────────────────────────────────────────
+  if (rawSite) {
+    // Find the best matching entry in SITE_MAP
+    const matchKey = [...SITE_MAP.keys()].find(k => rawSite.includes(k) || k.includes(rawSite));
+
+    if (matchKey) {
+      const siteUrl = SITE_MAP.get(matchKey);
+      if (siteUrl === 'fandom') {
+        tasks.push(() => runTask(`Fandom wiki`, "📖", () => scrapeFandom()));
+      } else {
+        tasks.push(() => runTask(matchKey, "🌐", () => scrapeGuideSite(siteUrl)));
+      }
+      // Also search Reddit/YouTube/Google with keyword if provided
+      const kw = rawQuery || "steal a brainrot private server";
+      tasks.push(() => runTask(`Reddit: "${kw}"`, "🔴", () => searchReddit(kw)));
+      tasks.push(() => runTask(`Reddit comments: "${kw}"`, "🔴", () => searchReddit(kw, "comment")));
+      if (YOUTUBE_API_KEY) tasks.push(() => runTask("YouTube", "▶️", () => searchYoutube(kw + " roblox private server")));
+    } else {
+      // Unknown site — try generic scrape
+      emit("log", `⚠️ ${rawSite} — No API found, attempting generic scrape...`, { status: "running" });
+      let targetUrl = rawSite.startsWith('http') ? rawSite : `https://${rawSite}`;
+      tasks.push(() => runTask(rawSite, "🌐", () => scrapeGuideSite(targetUrl)));
+    }
+
+  // ── KEYWORD-ONLY SEARCH ──────────────────────────────────────────────────
+  } else if (rawQuery) {
+    // Build smart queries: always append roblox share context so we actually find links
+    const kw = rawQuery;
+    const kwShare = `${kw} roblox.com/share`;
+    const kwPS    = `${kw} steal a brainrot private server`;
+    tasks = [
+      () => runTask(`Reddit: "${kw}"`,              "🔴", () => searchReddit(kw)),
+      () => runTask(`Reddit: "${kwShare}"`,          "🔴", () => searchReddit(kwShare)),
+      () => runTask(`Reddit comments: "${kw}"`,      "🔴", () => searchReddit(kw, "comment")),
+      () => runTask(`Reddit: "${kwPS}"`,             "🔴", () => searchReddit(kwPS)),
+      () => runTask(`r/StealaBrainrot1: "${kw}"`,    "🔴", () => searchSubreddit("StealaBrainrot1", kw)),
+      () => runTask(`r/roblox: "${kw}"`,             "🔴", () => searchSubreddit("roblox", kw)),
+      ...(YOUTUBE_API_KEY ? [
+        () => runTask(`YouTube: "${kw}"`,            "▶️",  () => searchYoutube(kw + " roblox private server")),
+      ] : []),
+      ...(GOOGLE_CX && GOOGLE_API_KEY ? [
+        () => runTask(`Google: "${kwShare}"`,        "🔵", () => searchGoogle(kwShare)),
+      ] : []),
+      // Also hit all guide sites — they might have the keyword in their curated lists
+      ...GUIDE_SITES.map(url => {
+        const name = new URL(url).hostname.replace("www.", "");
+        return () => runTask(name, "🌐", () => scrapeGuideSite(url));
+      }),
+      () => runTask("Fandom wiki", "📖", () => scrapeFandom()),
+    ];
+
+  // ── DEFAULT SEARCH (no keyword, no site) ────────────────────────────────
+  } else {
+    tasks = [
+      () => runTask("Reddit: steal a brainrot share",    "🔴", () => searchReddit("steal a brainrot roblox.com/share")),
+      () => runTask("Reddit: private server roblox",     "🔴", () => searchReddit("steal a brainrot private server roblox")),
+      () => runTask("Reddit: share code brainrot",       "🔴", () => searchReddit("roblox share code steal brainrot")),
+      () => runTask("Reddit: type=Server",               "🔴", () => searchReddit("roblox.com/share?code type=Server steal a brainrot")),
+      () => runTask("Reddit comments: share links",      "🔴", () => searchReddit("steal a brainrot roblox.com/share", "comment")),
+      () => runTask("Reddit comments: type=Server",      "🔴", () => searchReddit("roblox.com/share type=Server steal brainrot", "comment")),
+      () => runTask("r/roblox: private server",          "🔴", () => searchSubreddit("roblox", "steal a brainrot private server")),
+      () => runTask("r/roblox: share code",              "🔴", () => searchSubreddit("roblox", "steal a brainrot share code")),
+      () => runTask("r/RobloxHelp",                      "🔴", () => searchSubreddit("RobloxHelp", "steal a brainrot")),
+      () => runTask("r/StealaBrainrot1: share links",    "🔴", () => searchSubreddit("StealaBrainrot1", "roblox.com/share")),
+      () => runTask("r/StealaBrainrot1: private server", "🔴", () => searchSubreddit("StealaBrainrot1", "private server")),
+      () => runTask("r/StealaBrainrot1: /new feed",      "🔴", () => fetchSubredditNew("StealaBrainrot1")),
+      ...(YOUTUBE_API_KEY ? [
+        () => runTask("YouTube: server codes",           "▶️",  () => searchYoutube("steal a brainrot roblox private server code")),
+        () => runTask("YouTube: share links",            "▶️",  () => searchYoutube("steal a brainrot roblox.com/share")),
+      ] : []),
+      ...(GOOGLE_CX && GOOGLE_API_KEY ? [
+        () => runTask("Google: private server",          "🔵", () => searchGoogle("steal a brainrot private server")),
+        () => runTask("Google: share links",             "🔵", () => searchGoogle("roblox.com/share steal a brainrot")),
+      ] : []),
+      ...GUIDE_SITES.map(url => {
+        const name = new URL(url).hostname.replace("www.", "");
+        return () => runTask(name, "🌐", () => scrapeGuideSite(url));
+      }),
+      () => runTask("Fandom wiki", "📖", () => scrapeFandom()),
+    ];
+  }
+
+  // Run in batches of 2
   for (let i = 0; i < tasks.length; i += 2) {
-    const batch = tasks.slice(i, i + 2);
-    await Promise.all(batch.map(fn => fn()));
+    await Promise.all(tasks.slice(i, i + 2).map(fn => fn()));
     if (i + 2 < tasks.length) await new Promise(r => setTimeout(r, 1200));
   }
 
-  // Sort newest first
   const sorted = allResults.sort((a, b) => {
     if (a.postedAt && b.postedAt) return new Date(b.postedAt) - new Date(a.postedAt);
     if (a.postedAt) return -1;
