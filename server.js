@@ -592,7 +592,102 @@ app.get("/api/servers", async (req, res) => {
   }
 });
 
-app.get("/api/status", (req, res) => {
+// ── /api/search-stream — Server-Sent Events live log feed ────────────────────
+app.get("/api/search-stream", async (req, res) => {
+  const customQuery = req.query.q || null;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const emit = (type, msg, data = {}) => {
+    res.write(`data: ${JSON.stringify({ type, msg, ...data })}\n\n`);
+  };
+
+  emit("log", "🚀 Starting search...", { icon: "start" });
+
+  const allResults = [];
+  const seen = new Map();
+
+  const addResults = (items, source) => {
+    let newCount = 0;
+    for (const r of items) {
+      if (!seen.has(r.code)) {
+        seen.set(r.code, r);
+        allResults.push(r);
+        newCount++;
+      }
+    }
+    return newCount;
+  };
+
+  // ── Helper to run a named task and emit log ──────────────────────────────
+  const runTask = async (label, icon, fn) => {
+    emit("log", `${icon} ${label}...`, { status: "running" });
+    try {
+      const results = await fn();
+      const n = addResults(results, label);
+      if (n > 0) {
+        emit("log", `${icon} ${label} → found ${n} link${n !== 1 ? "s" : ""}`, { status: "found", count: n });
+      } else {
+        emit("log", `${icon} ${label} → nothing found`, { status: "empty" });
+      }
+    } catch (e) {
+      emit("log", `${icon} ${label} → error: ${e.message}`, { status: "error" });
+    }
+  };
+
+  const tasks = customQuery ? [
+    () => runTask(`Reddit: "${customQuery}"`,       "🔴", () => searchReddit(customQuery)),
+    () => runTask(`Reddit comments: "${customQuery}"`, "🔴", () => searchReddit(customQuery, "comment")),
+    () => runTask("YouTube",                        "▶️",  () => searchYoutube(customQuery + " roblox private server")),
+    () => runTask("Google",                         "🔵", () => searchGoogle(customQuery + " roblox.com/share")),
+  ] : [
+    () => runTask("Reddit: steal a brainrot share",  "🔴", () => searchReddit("steal a brainrot roblox.com/share")),
+    () => runTask("Reddit: private server roblox",   "🔴", () => searchReddit("steal a brainrot private server roblox")),
+    () => runTask("Reddit: share code brainrot",     "🔴", () => searchReddit("roblox share code steal brainrot")),
+    () => runTask("Reddit: type=Server",             "🔴", () => searchReddit("roblox.com/share?code type=Server steal a brainrot")),
+    () => runTask("Reddit comments: share links",    "🔴", () => searchReddit("steal a brainrot roblox.com/share", "comment")),
+    () => runTask("Reddit comments: type=Server",    "🔴", () => searchReddit("roblox.com/share type=Server steal brainrot", "comment")),
+    () => runTask("r/roblox: private server",        "🔴", () => searchSubreddit("roblox", "steal a brainrot private server")),
+    () => runTask("r/roblox: share code",            "🔴", () => searchSubreddit("roblox", "steal a brainrot share code")),
+    () => runTask("r/RobloxHelp",                    "🔴", () => searchSubreddit("RobloxHelp", "steal a brainrot")),
+    () => runTask("r/StealaBrainrot1: share links",  "🔴", () => searchSubreddit("StealaBrainrot1", "roblox.com/share")),
+    () => runTask("r/StealaBrainrot1: private server","🔴",() => searchSubreddit("StealaBrainrot1", "private server")),
+    () => runTask("r/StealaBrainrot1: /new feed",    "🔴", () => fetchSubredditNew("StealaBrainrot1")),
+    () => runTask("YouTube: server codes",           "▶️",  () => searchYoutube("steal a brainrot roblox private server code")),
+    () => runTask("YouTube: share links",            "▶️",  () => searchYoutube("steal a brainrot roblox.com/share")),
+    () => runTask("Google: private server",          "🔵", () => searchGoogle("steal a brainrot private server")),
+    () => runTask("Google: share links",             "🔵", () => searchGoogle("roblox.com/share steal a brainrot")),
+    ...GUIDE_SITES.map(url => {
+      const name = new URL(url).hostname.replace("www.", "");
+      return () => runTask(name, "🌐", () => scrapeGuideSite(url));
+    }),
+    () => runTask("Fandom wiki",                     "📖", () => scrapeFandom()),
+  ];
+
+  // Run in batches of 2 with delay between batches
+  for (let i = 0; i < tasks.length; i += 2) {
+    const batch = tasks.slice(i, i + 2);
+    await Promise.all(batch.map(fn => fn()));
+    if (i + 2 < tasks.length) await new Promise(r => setTimeout(r, 1200));
+  }
+
+  // Sort newest first
+  const sorted = allResults.sort((a, b) => {
+    if (a.postedAt && b.postedAt) return new Date(b.postedAt) - new Date(a.postedAt);
+    if (a.postedAt) return -1;
+    if (b.postedAt) return 1;
+    return 0;
+  });
+
+  emit("log", `✅ Done! Found ${sorted.length} unique link${sorted.length !== 1 ? "s" : ""}`, { status: "done" });
+  emit("done", "Search complete", { results: sorted });
+  res.end();
+});
+
+
   res.json({
     status: "online",
     providers: {
