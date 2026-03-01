@@ -190,9 +190,11 @@
   .card-code { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--green); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .card-source { font-size: 11px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .card-provider { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-family: 'Space Mono', monospace; flex-shrink: 0; }
-  .card-provider.reddit  { background: rgba(255,69,0,0.15);  color: #ff8c5a; border: 1px solid rgba(255,69,0,0.3); }
-  .card-provider.youtube { background: rgba(255,0,0,0.15);   color: #ff6b6b; border: 1px solid rgba(255,0,0,0.3); }
-  .card-provider.google  { background: rgba(66,133,244,0.15); color: #7baeff; border: 1px solid rgba(66,133,244,0.3); }
+  .card-provider.reddit    { background: rgba(255,69,0,0.15);   color: #ff8c5a; border: 1px solid rgba(255,69,0,0.3); }
+  .card-provider.youtube   { background: rgba(255,0,0,0.15);    color: #ff6b6b; border: 1px solid rgba(255,0,0,0.3); }
+  .card-provider.google    { background: rgba(66,133,244,0.15); color: #7baeff; border: 1px solid rgba(66,133,244,0.3); }
+  .card-provider.web       { background: rgba(58,255,180,0.1);  color: #3affb4; border: 1px solid rgba(58,255,180,0.25); }
+  .card-provider.rbxservers{ background: rgba(180,58,255,0.1);  color: #c97aff; border: 1px solid rgba(180,58,255,0.25); }
 
   /* ── Filter bar ──────────────────────────────────────────────────────────── */
   .filter-bar {
@@ -394,10 +396,12 @@ async function doSearch() {
 
   const messages = [
     'Scanning Reddit for private servers…',
-    'Searching r/roblox & r/RobloxHelp…',
-    'Checking r/StealaBrainrot1…',
+    'Searching r/StealaBrainrot1…',
     'Scanning YouTube descriptions…',
-    'Searching Google for share links…',
+    'Scraping RBXServers.xyz (384 servers)…',
+    'Scraping game guide websites…',
+    'Checking Fandom wiki…',
+    'Searching Google…',
     'Parsing share codes…',
     'Almost there…',
   ];
@@ -525,7 +529,8 @@ function buildCards(results) {
     // Icon
     const icon = document.createElement('div');
     icon.className = 'card-icon';
-    icon.textContent = r.provider === 'youtube' ? '▶️' : r.provider === 'google' ? '🔵' : '🔗';
+    const icons = { youtube: '▶️', google: '🔵', rbxservers: '🟣', web: '🌐' };
+    icon.textContent = icons[r.provider] || '🔗';
 
     // Body
     const body = document.createElement('div');
