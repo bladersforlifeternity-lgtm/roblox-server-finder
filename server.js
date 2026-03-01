@@ -18,17 +18,18 @@ const CACHE_TTL = 0; // always fetch fresh — no caching
 let fetchInProgress = false;
 let fetchQueue = [];
 
-// Matches the full share URL and captures: code + optional &type=... param
-// Handles all known formats:
-//   roblox.com/share?code=ABC
-//   roblox.com/share?code=ABC&type=Server
-//   www.roblox.com/share?code=ABC&type=Server  (with or without protocol)
-const SHARE_REGEX = /(?:https?:\/\/)?(?:www\.)?roblox\.com\/share\?code=([A-Za-z0-9_\-]+)(?:&type=([A-Za-z0-9_\-]+))?/gi;
+// ── Two Roblox private server URL formats ─────────────────────────────────────
+// Format 1: roblox.com/share?code=ABC&type=Server  (new share links)
+// Format 2: roblox.com/games/109983668079237/Steal-a-Brainrot?privateServerLinkCode=ABC  (old format)
+const SHARE_REGEX      = /(?:https?:\/\/)?(?:www\.)?roblox\.com\/share\?code=([A-Za-z0-9_\-]+)(?:[&?]type=([A-Za-z0-9_\-]+))?/gi;
+const PS_LINK_REGEX    = /(?:https?:\/\/)?(?:www\.)?roblox\.com\/games\/(\d+)[^\s"'<>]*[?&]privateServerLinkCode=([A-Za-z0-9_\-]+)/gi;
 
 function extractShareLinks(text) {
   if (!text) return [];
   const seen = new Map();
   let match;
+
+  // Format 1: share?code=...
   SHARE_REGEX.lastIndex = 0;
   while ((match = SHARE_REGEX.exec(text)) !== null) {
     const code = match[1];
@@ -37,9 +38,22 @@ function extractShareLinks(text) {
       const url = type
         ? `https://www.roblox.com/share?code=${code}&type=${type}`
         : `https://www.roblox.com/share?code=${code}`;
-      seen.set(code, { code, url, type });
+      seen.set(code, { code, url, type: type || "Server" });
     }
   }
+
+  // Format 2: privateServerLinkCode=...
+  PS_LINK_REGEX.lastIndex = 0;
+  while ((match = PS_LINK_REGEX.exec(text)) !== null) {
+    const gameId   = match[1];
+    const linkCode = match[2];
+    const key      = `pslc_${linkCode}`;
+    if (!seen.has(key)) {
+      const url = `https://www.roblox.com/games/${gameId}/Steal-a-Brainrot?privateServerLinkCode=${linkCode}`;
+      seen.set(key, { code: key, url, type: "Server" });
+    }
+  }
+
   return [...seen.values()];
 }
 
@@ -366,6 +380,83 @@ app.get("/api/debug-google", async (req, res) => {
     res.json({ error: e.message, status: e.response?.status, details: e.response?.data });
   }
 });
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  PROVIDER: RBXSERVERS.XYZ — 384+ active servers, health-checked  ║
+// ╚══════════════════════════════════════════════════════════════════╝
+async function scrapeRBXServers() {
+  try {
+    const res = await http.get("https://rbxservers.xyz/api/v1/servers/109983668079237", {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+      timeout: 15000,
+    });
+    const servers = Array.isArray(res.data) ? res.data : (res.data?.servers || []);
+    const found = [];
+    for (const s of servers) {
+      const link = s.link || s.url || s.shareLink || s.vipLink || s.serverLink || "";
+      extractShareLinks(link).forEach(({ code, url, type }) =>
+        found.push({ code, url, type: type || "Server",
+          source: "https://rbxservers.xyz/games/109983668079237",
+          title: s.name || s.title || "RBXServers listing",
+          provider: "rbxservers" })
+      );
+    }
+    console.log(`RBXServers: ${servers.length} servers, ${found.length} links`);
+    return found;
+  } catch (e) {
+    console.error("RBXServers error:", e.message);
+    return [];
+  }
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  PROVIDER: GAME GUIDE WEBSITES — curated lists with both URL     ║
+// ║  formats (share?code and privateServerLinkCode)                  ║
+// ╚══════════════════════════════════════════════════════════════════╝
+const GUIDE_SITES = [
+  "https://gamerant.com/steal-a-brainrot-private-server-links-roblox/",
+  "https://progameguides.com/roblox/steal-a-brainrot-private-server-links/",
+  "https://gamertweak.com/steal-a-brainrot-roblox-private-server-links/",
+  "https://deltiasgaming.com/all-working-roblox-steal-a-brainrot-private-server-links/",
+  "https://techwiser.com/steal-a-brainrot-private-servers-links-how-join/",
+  "https://www.thegamer.com/roblox-steal-a-brainrot-private-server-links-how-to-create-prive-server-guide/",
+  "https://scriptrot.com/steal-a-brainrot-private-server-link/",
+];
+
+async function scrapeGuideSite(url) {
+  try {
+    const res = await http.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+      timeout: 15000,
+    });
+    const links = extractShareLinks(res.data || "");
+    console.log(`Guide [${url}]: ${links.length} links`);
+    return links.map(({ code, url: linkUrl, type }) => ({
+      code, url: linkUrl, type: type || "Server",
+      source: url, title: "Game guide listing", provider: "web",
+    }));
+  } catch (e) {
+    console.error(`Guide error [${url}]:`, e.message);
+    return [];
+  }
+}
+
+async function scrapeFandom() {
+  const found = [];
+  try {
+    const res = await http.get("https://stealabrainrot.fandom.com/f/p/4400000000000050882", {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+      timeout: 12000,
+    });
+    extractShareLinks(res.data || "").forEach(({ code, url, type }) =>
+      found.push({ code, url, type: type || "Server", source: "https://stealabrainrot.fandom.com", title: "Fandom wiki", provider: "web" })
+    );
+  } catch (e) {
+    console.error("Fandom error:", e.message);
+  }
+  return found;
+}
+
 async function runBatch(tasks, batchSize = 2, delayMs = 1200) {
   const results = [];
   for (let i = 0; i < tasks.length; i += batchSize) {
@@ -412,6 +503,12 @@ async function findPrivateServers(customQuery = null) {
         // ── Google Custom Search (only runs if GOOGLE_CX + GOOGLE_API_KEY set) ─
         () => searchGoogle("steal a brainrot private server"),
         () => searchGoogle("roblox.com/share steal a brainrot"),
+        // ── RBXServers.xyz — 384+ live servers, no API key needed ────────────
+        () => scrapeRBXServers(),
+        // ── Game guide websites — curated lists, both URL formats ─────────────
+        ...GUIDE_SITES.map(url => () => scrapeGuideSite(url)),
+        // ── Fandom wiki — community-posted share codes ────────────────────────
+        () => scrapeFandom(),
       ];
 
   const allResults = await runBatch(tasks, 2, 1200);
