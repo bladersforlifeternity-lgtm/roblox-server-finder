@@ -316,9 +316,15 @@
     <span style="margin-left:auto;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)" id="lastFetch">—</span>
   </div>
 
-  <div class="controls">
-    <input type="text" id="queryInput" placeholder='Custom query (leave empty for default search)' />
-    <button class="btn-primary" id="searchBtn" onclick="doSearch()">🔍 Find Servers</button>
+  <div class="controls" style="flex-direction:column;gap:8px;">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <input type="text" id="queryInput" placeholder='🔤 Keyword (e.g. "free server" — leave empty for default)' />
+      <button class="btn-primary" id="searchBtn" onclick="doSearch()">🔍 Find Servers</button>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <input type="text" id="siteInput" placeholder='🌐 Website (e.g. progameguides.com — optional)' style="flex:1;min-width:200px;" />
+      <span id="siteStatus" style="font-family:\'Space Mono\',monospace;font-size:11px;color:var(--muted);white-space:nowrap;"></span>
+    </div>
   </div>
 
   <!-- Thin progress bar -->
@@ -366,6 +372,20 @@ let activeController = null;
 let searchLocked = false;
 let progressTimer = null;
 let activeFilter = 'all';
+
+// Must match GUIDE_SITES on the server
+const KNOWN_SITES = [
+  'gamerant.com','progameguides.com','gamertweak.com','deltiasgaming.com',
+  'techwiser.com','thegamer.com','scriptrot.com','rosenberryrooms.com',
+  'findingdulcinea.com','allthings.how','boundbyflame.com','pocketgamer.com',
+  'gameskeys.net','gamesatlas.net','sportskeeda.com','stealabrainrot.fandom.com',
+];
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('siteInput').addEventListener('input', onSiteInput);
+  document.getElementById('queryInput').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+  loadStatus();
+});
 
 // ── Simulated progress bar ────────────────────────────────────────────────────
 function startProgress() {
@@ -453,6 +473,21 @@ function termClear() {
   termCursor = null;
 }
 
+// ── Site input validator ──────────────────────────────────────────────────────
+function onSiteInput() {
+  const val = document.getElementById('siteInput').value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*/, '');
+  const status = document.getElementById('siteStatus');
+  if (!val) { status.textContent = ''; return; }
+  const known = KNOWN_SITES.some(s => s.includes(val) || val.includes(s.replace('www.','')));
+  if (known) {
+    status.textContent = '✓ Site supported';
+    status.style.color = '#3aff64';
+  } else {
+    status.textContent = '✗ No API found — will try generic scrape';
+    status.style.color = '#ff6b6b';
+  }
+}
+
 // ── Main search ───────────────────────────────────────────────────────────────
 async function doSearch() {
   if (searchLocked) return;
@@ -461,11 +496,12 @@ async function doSearch() {
   if (activeController) activeController.abort();
   activeController = new AbortController();
 
-  const btn          = document.getElementById('searchBtn');
-  const terminal     = document.getElementById('terminal');
+  const btn            = document.getElementById('searchBtn');
+  const terminal       = document.getElementById('terminal');
   const resultsSection = document.getElementById('resultsSection');
-  const emptyState   = document.getElementById('emptyState');
-  const query        = document.getElementById('queryInput').value.trim();
+  const emptyState     = document.getElementById('emptyState');
+  const query          = document.getElementById('queryInput').value.trim();
+  const site           = document.getElementById('siteInput').value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
 
   btn.disabled = true;
   termClear();
@@ -476,7 +512,10 @@ async function doSearch() {
 
   try {
     let url = '/api/search-stream';
-    if (query) url += '?q=' + encodeURIComponent(query);
+    const params = [];
+    if (query) params.push('q=' + encodeURIComponent(query));
+    if (site)  params.push('site=' + encodeURIComponent(site));
+    if (params.length) url += '?' + params.join('&');
 
     const es = new EventSource(url);
 
@@ -484,52 +523,29 @@ async function doSearch() {
       es.onmessage = (e) => {
         try {
           const data = JSON.parse(e.data);
-
-          if (data.type === 'log') {
-            termLog(data.msg, data.status || 'running');
-          }
-
+          if (data.type === 'log') termLog(data.msg, data.status || 'running');
           if (data.type === 'done') {
             es.close();
             finishProgress();
-
             currentResults = data.results || [];
-
             if (currentResults.length === 0) {
               terminal.classList.remove('show');
               emptyState.classList.add('show');
             } else {
               renderResults(currentResults);
-              // Keep terminal visible but collapsed after
             }
-
             document.getElementById('lastFetch').textContent = 'Last: ' + new Date().toLocaleTimeString();
             document.getElementById('statusText').textContent = 'API Online';
             resolve();
           }
-        } catch(err) {
-          // ignore parse errors
-        }
+        } catch(err) {}
       };
-
-      es.onerror = (e) => {
-        es.close();
-        finishProgress();
-        reject(new Error('Stream disconnected'));
-      };
-
-      // Abort support
-      activeController.signal.addEventListener('abort', () => {
-        es.close();
-        resolve();
-      });
+      es.onerror = () => { es.close(); finishProgress(); reject(new Error('Stream disconnected')); };
+      activeController.signal.addEventListener('abort', () => { es.close(); resolve(); });
     });
-
   } catch(e) {
     finishProgress();
-    if (e.name !== 'AbortError') {
-      termLog('❌ Error: ' + e.message, 'error');
-    }
+    if (e.name !== 'AbortError') termLog('❌ Error: ' + e.message, 'error');
   } finally {
     btn.disabled = false;
     searchLocked = false;
