@@ -138,6 +138,7 @@ function parsePosts(children) {
     const combined =
       (d.title || "") + " " + (d.selftext || "") + " " + (d.url || "") + " " + (d.body || "");
     const links = extractShareLinks(combined);
+    const postedAt = d.created_utc ? new Date(d.created_utc * 1000).toISOString() : null;
     links.forEach(({ code, url, type }) =>
       found.push({
         code,
@@ -146,6 +147,7 @@ function parsePosts(children) {
         source: `https://reddit.com${d.permalink}`,
         title: d.title || "Reddit comment",
         provider: "reddit",
+        postedAt,
       })
     );
   }
@@ -463,67 +465,6 @@ async function runBatch(tasks, batchSize = 2, delayMs = 1200) {
   return results;
 }
 
-// ╔══════════════════════════════════════════════════════════════════╗
-// ║  LINK VALIDATOR                                                   ║
-// ║  Checks each found link against Roblox to filter dead ones       ║
-// ║  Runs 10 checks at a time — fast parallel validation             ║
-// ╚══════════════════════════════════════════════════════════════════╝
-async function isLinkAlive(url) {
-  try {
-    // For share?code= links — Roblox returns 200 + JSON with serverLink if valid, 400/404 if dead
-    if (url.includes("/share?code=")) {
-      const code = new URL(url).searchParams.get("code");
-      const res = await axios.get(`https://apis.roblox.com/share/v1/resolve?code=${code}`, {
-        headers: { "User-Agent": "RobloxServerFinder/1.0" },
-        timeout: 6000,
-        validateStatus: null, // don't throw on 4xx
-      });
-      return res.status === 200;
-    }
-
-    // For privateServerLinkCode= links — do a HEAD check on the Roblox page
-    if (url.includes("privateServerLinkCode=")) {
-      const linkCode = new URL(url).searchParams.get("privateServerLinkCode");
-      const res = await axios.get(
-        `https://games.roblox.com/v1/games/vip-servers/find?linkCode=${linkCode}`,
-        {
-          headers: { "User-Agent": "RobloxServerFinder/1.0" },
-          timeout: 6000,
-          validateStatus: null,
-        }
-      );
-      return res.status === 200;
-    }
-
-    return true; // unknown format — keep it
-  } catch {
-    return false; // timeout or network error — treat as dead
-  }
-}
-
-async function validateLinks(results) {
-  if (!results.length) return results;
-
-  console.log(`Validating ${results.length} links...`);
-
-  // Run 10 validations at a time
-  const BATCH = 10;
-  const alive = [];
-
-  for (let i = 0; i < results.length; i += BATCH) {
-    const batch = results.slice(i, i + BATCH);
-    const checks = await Promise.allSettled(
-      batch.map(r => isLinkAlive(r.url).then(ok => ({ r, ok })))
-    );
-    for (const c of checks) {
-      if (c.status === "fulfilled" && c.value.ok) alive.push(c.value.r);
-    }
-  }
-
-  console.log(`Validation done: ${alive.length}/${results.length} links alive`);
-  return alive;
-}
-
 async function findPrivateServers(customQuery = null) {
   const tasks = customQuery
     ? [
@@ -563,16 +504,19 @@ async function findPrivateServers(customQuery = null) {
 
   const allResults = await runBatch(tasks, 2, 1200);
 
-  // Deduplicate
+  // Deduplicate by code
   const seen = new Map();
   for (const r of allResults) {
     if (!seen.has(r.code)) seen.set(r.code, r);
   }
-  const unique = [...seen.values()];
 
-  // Validate — remove dead links
-  const live = await validateLinks(unique);
-  return live;
+  // Sort newest first — Reddit posts with postedAt come first, web sources after
+  return [...seen.values()].sort((a, b) => {
+    if (a.postedAt && b.postedAt) return new Date(b.postedAt) - new Date(a.postedAt);
+    if (a.postedAt) return -1;
+    if (b.postedAt) return 1;
+    return 0;
+  });
 }
 
 // ── /api/servers — deduplicated so rapid requests share one in-flight fetch ──
