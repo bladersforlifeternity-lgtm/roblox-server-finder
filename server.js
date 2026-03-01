@@ -386,6 +386,7 @@ app.get("/api/debug-google", async (req, res) => {
 // ║  formats (share?code and privateServerLinkCode)                  ║
 // ╚══════════════════════════════════════════════════════════════════╝
 const GUIDE_SITES = [
+  // Major game guide sites — updated monthly
   "https://gamerant.com/steal-a-brainrot-private-server-links-roblox/",
   "https://progameguides.com/roblox/steal-a-brainrot-private-server-links/",
   "https://gamertweak.com/steal-a-brainrot-roblox-private-server-links/",
@@ -393,6 +394,15 @@ const GUIDE_SITES = [
   "https://techwiser.com/steal-a-brainrot-private-servers-links-how-join/",
   "https://www.thegamer.com/roblox-steal-a-brainrot-private-server-links-how-to-create-prive-server-guide/",
   "https://scriptrot.com/steal-a-brainrot-private-server-link/",
+  // Additional sites found with actual codes
+  "https://www.rosenberryrooms.com/steal-a-brainrot-private-servers-links/",
+  "https://findingdulcinea.com/steal-a-brainrot-private-server-links/",
+  "https://allthings.how/how-to-use-steal-a-brainrot-private-servers-in-january-2026/",
+  "https://boundbyflame.com/private-server-links-in-steal-a-brainrot/",
+  "https://www.pocketgamer.com/steal-a-brainrot/private-server-links/",
+  "https://gameskeys.net/steal-a-brainrot-private-server-links/",
+  "https://www.gamesatlas.net/roblox/steal-a-brainrot-private-server-links/",
+  "https://www.sportskeeda.com/roblox/steal-a-brainrot-private-server-links",
 ];
 
 async function scrapeGuideSite(url) {
@@ -414,18 +424,27 @@ async function scrapeGuideSite(url) {
 }
 
 async function scrapeFandom() {
+  const urls = [
+    "https://stealabrainrot.fandom.com/f/p/4400000000000050882",           // main PS thread
+    "https://stealabrainrot.fandom.com/f/p/4400000000000050882/r/4400000000000176683", // replies page
+    "https://stealabrainrot.fandom.com/wiki/Private_Servers",
+    "https://stealabrainrot.fandom.com/f",                                  // forum index
+  ];
   const found = [];
-  try {
-    const res = await http.get("https://stealabrainrot.fandom.com/f/p/4400000000000050882", {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-      timeout: 12000,
-    });
-    extractShareLinks(res.data || "").forEach(({ code, url, type }) =>
-      found.push({ code, url, type: type || "Server", source: "https://stealabrainrot.fandom.com", title: "Fandom wiki", provider: "web" })
-    );
-  } catch (e) {
-    console.error("Fandom error:", e.message);
+  for (const url of urls) {
+    try {
+      const res = await http.get(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
+        timeout: 12000,
+      });
+      extractShareLinks(res.data || "").forEach(({ code, url: linkUrl, type }) =>
+        found.push({ code, url: linkUrl, type: type || "Server", source: url, title: "Fandom wiki", provider: "web" })
+      );
+    } catch (e) {
+      console.error(`Fandom error [${url}]:`, e.message);
+    }
   }
+  console.log(`Fandom: ${found.length} links`);
   return found;
 }
 
@@ -442,6 +461,67 @@ async function runBatch(tasks, batchSize = 2, delayMs = 1200) {
     }
   }
   return results;
+}
+
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  LINK VALIDATOR                                                   ║
+// ║  Checks each found link against Roblox to filter dead ones       ║
+// ║  Runs 10 checks at a time — fast parallel validation             ║
+// ╚══════════════════════════════════════════════════════════════════╝
+async function isLinkAlive(url) {
+  try {
+    // For share?code= links — Roblox returns 200 + JSON with serverLink if valid, 400/404 if dead
+    if (url.includes("/share?code=")) {
+      const code = new URL(url).searchParams.get("code");
+      const res = await axios.get(`https://apis.roblox.com/share/v1/resolve?code=${code}`, {
+        headers: { "User-Agent": "RobloxServerFinder/1.0" },
+        timeout: 6000,
+        validateStatus: null, // don't throw on 4xx
+      });
+      return res.status === 200;
+    }
+
+    // For privateServerLinkCode= links — do a HEAD check on the Roblox page
+    if (url.includes("privateServerLinkCode=")) {
+      const linkCode = new URL(url).searchParams.get("privateServerLinkCode");
+      const res = await axios.get(
+        `https://games.roblox.com/v1/games/vip-servers/find?linkCode=${linkCode}`,
+        {
+          headers: { "User-Agent": "RobloxServerFinder/1.0" },
+          timeout: 6000,
+          validateStatus: null,
+        }
+      );
+      return res.status === 200;
+    }
+
+    return true; // unknown format — keep it
+  } catch {
+    return false; // timeout or network error — treat as dead
+  }
+}
+
+async function validateLinks(results) {
+  if (!results.length) return results;
+
+  console.log(`Validating ${results.length} links...`);
+
+  // Run 10 validations at a time
+  const BATCH = 10;
+  const alive = [];
+
+  for (let i = 0; i < results.length; i += BATCH) {
+    const batch = results.slice(i, i + BATCH);
+    const checks = await Promise.allSettled(
+      batch.map(r => isLinkAlive(r.url).then(ok => ({ r, ok })))
+    );
+    for (const c of checks) {
+      if (c.status === "fulfilled" && c.value.ok) alive.push(c.value.r);
+    }
+  }
+
+  console.log(`Validation done: ${alive.length}/${results.length} links alive`);
+  return alive;
 }
 
 async function findPrivateServers(customQuery = null) {
@@ -483,11 +563,16 @@ async function findPrivateServers(customQuery = null) {
 
   const allResults = await runBatch(tasks, 2, 1200);
 
+  // Deduplicate
   const seen = new Map();
   for (const r of allResults) {
     if (!seen.has(r.code)) seen.set(r.code, r);
   }
-  return [...seen.values()];
+  const unique = [...seen.values()];
+
+  // Validate — remove dead links
+  const live = await validateLinks(unique);
+  return live;
 }
 
 // ── /api/servers — deduplicated so rapid requests share one in-flight fetch ──
