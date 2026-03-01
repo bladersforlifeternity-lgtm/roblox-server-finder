@@ -228,6 +228,7 @@
   .filter-btn.active-reddit  { background: rgba(255,69,0,0.2);   border-color: #ff8c5a; color: #ff8c5a; }
   .filter-btn.active-youtube { background: rgba(255,0,0,0.2);    border-color: #ff6b6b; color: #ff6b6b; }
   .filter-btn.active-google  { background: rgba(66,133,244,0.2); border-color: #7baeff; color: #7baeff; }
+  .filter-btn.active-web     { background: rgba(58,255,180,0.1); border-color: #3affb4; color: #3affb4; }
   .filter-count {
     font-family: 'Space Mono', monospace;
     font-size: 10px;
@@ -309,6 +310,7 @@
       <button class="filter-btn"            id="filterReddit"  onclick="setFilter('reddit')">🔴 Reddit <span class="filter-count" id="countReddit">0</span></button>
       <button class="filter-btn"            id="filterYoutube" onclick="setFilter('youtube')">▶️ YouTube <span class="filter-count" id="countYoutube">0</span></button>
       <button class="filter-btn"            id="filterGoogle"  onclick="setFilter('google')">🔵 Google <span class="filter-count" id="countGoogle">0</span></button>
+      <button class="filter-btn"            id="filterWeb"     onclick="setFilter('web')">🌐 Web <span class="filter-count" id="countWeb">0</span></button>
     </div>
     <div class="results-grid" id="resultsGrid"></div>
   </div>
@@ -459,6 +461,7 @@ function setFilter(f) {
   document.getElementById('filterReddit').className  = 'filter-btn' + (f === 'reddit'  ? ' active-reddit'  : '');
   document.getElementById('filterYoutube').className = 'filter-btn' + (f === 'youtube' ? ' active-youtube' : '');
   document.getElementById('filterGoogle').className  = 'filter-btn' + (f === 'google'  ? ' active-google'  : '');
+  document.getElementById('filterWeb').className     = 'filter-btn' + (f === 'web'     ? ' active-web'     : '');
   applyFilter();
 }
 
@@ -496,13 +499,14 @@ function renderResults(results) {
   badge.textContent = results.length + ' server' + (results.length !== 1 ? 's' : '') + ' found';
 
   // Count per provider
-  const counts = { all: results.length, reddit: 0, youtube: 0, google: 0 };
+  const counts = { all: results.length, reddit: 0, youtube: 0, google: 0, web: 0 };
   results.forEach(r => { if (counts[r.provider] !== undefined) counts[r.provider]++; });
 
   document.getElementById('countAll').textContent     = counts.all;
   document.getElementById('countReddit').textContent  = counts.reddit;
   document.getElementById('countYoutube').textContent = counts.youtube;
   document.getElementById('countGoogle').textContent  = counts.google;
+  document.getElementById('countWeb').textContent     = counts.web;
 
   // Show filter bar whenever there are results (even if only one provider)
   document.getElementById('filterBar').classList.toggle('show', results.length > 0);
