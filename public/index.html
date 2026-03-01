@@ -403,8 +403,7 @@ async function doSearch() {
     'Scraping game guide websites…',
     'Checking Fandom wiki…',
     'Searching Google…',
-    '✓ Validating links are still alive…',
-    'Removing dead links…',
+    'Sorting by newest first…',
     'Almost there…',
   ];
   let msgIdx = 0;
@@ -551,10 +550,23 @@ function buildCards(results) {
     body.appendChild(code);
     body.appendChild(source);
 
-    // Live badge
-    const liveBadge = document.createElement('span');
-    liveBadge.textContent = '✓ Live';
-    liveBadge.style.cssText = "font-family:'Space Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;background:rgba(58,255,100,0.12);color:#3aff64;border:1px solid rgba(58,255,100,0.3);flex-shrink:0;";
+    // Age badge — shows how old the post is
+    const ageBadge = document.createElement('span');
+    if (r.postedAt) {
+      const diffMs = Date.now() - new Date(r.postedAt);
+      const diffDays = Math.floor(diffMs / 86400000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      let ageText, ageColor;
+      if (diffHours < 24)       { ageText = diffHours + 'h ago';   ageColor = '#3aff64'; }
+      else if (diffDays < 7)    { ageText = diffDays + 'd ago';    ageColor = '#3aff64'; }
+      else if (diffDays < 30)   { ageText = diffDays + 'd ago';    ageColor = '#ffd54f'; }
+      else                      { ageText = diffDays + 'd ago';    ageColor = '#ff6b6b'; }
+      ageBadge.textContent = ageText;
+      ageBadge.style.cssText = `font-family:'Space Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;background:rgba(0,0,0,0.2);color:${ageColor};border:1px solid ${ageColor}44;flex-shrink:0;`;
+    } else {
+      ageBadge.textContent = 'web source';
+      ageBadge.style.cssText = "font-family:'Space Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;background:rgba(58,255,180,0.08);color:#3affb4;border:1px solid rgba(58,255,180,0.2);flex-shrink:0;";
+    }
 
     // Type badge
     const typeBadge = document.createElement('span');
@@ -576,7 +588,7 @@ function buildCards(results) {
 
     card.appendChild(icon);
     card.appendChild(body);
-    card.appendChild(liveBadge);
+    card.appendChild(ageBadge);
     card.appendChild(typeBadge);
     card.appendChild(providerBadge);
     card.appendChild(joinBtn);
