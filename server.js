@@ -382,34 +382,6 @@ app.get("/api/debug-google", async (req, res) => {
 });
 
 // ╔══════════════════════════════════════════════════════════════════╗
-// ║  PROVIDER: RBXSERVERS.XYZ — 384+ active servers, health-checked  ║
-// ╚══════════════════════════════════════════════════════════════════╝
-async function scrapeRBXServers() {
-  try {
-    const res = await http.get("https://rbxservers.xyz/api/v1/servers/109983668079237", {
-      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" },
-      timeout: 15000,
-    });
-    const servers = Array.isArray(res.data) ? res.data : (res.data?.servers || []);
-    const found = [];
-    for (const s of servers) {
-      const link = s.link || s.url || s.shareLink || s.vipLink || s.serverLink || "";
-      extractShareLinks(link).forEach(({ code, url, type }) =>
-        found.push({ code, url, type: type || "Server",
-          source: "https://rbxservers.xyz/games/109983668079237",
-          title: s.name || s.title || "RBXServers listing",
-          provider: "rbxservers" })
-      );
-    }
-    console.log(`RBXServers: ${servers.length} servers, ${found.length} links`);
-    return found;
-  } catch (e) {
-    console.error("RBXServers error:", e.message);
-    return [];
-  }
-}
-
-// ╔══════════════════════════════════════════════════════════════════╗
 // ║  PROVIDER: GAME GUIDE WEBSITES — curated lists with both URL     ║
 // ║  formats (share?code and privateServerLinkCode)                  ║
 // ╚══════════════════════════════════════════════════════════════════╝
@@ -503,8 +475,6 @@ async function findPrivateServers(customQuery = null) {
         // ── Google Custom Search (only runs if GOOGLE_CX + GOOGLE_API_KEY set) ─
         () => searchGoogle("steal a brainrot private server"),
         () => searchGoogle("roblox.com/share steal a brainrot"),
-        // ── RBXServers.xyz — 384+ live servers, no API key needed ────────────
-        () => scrapeRBXServers(),
         // ── Game guide websites — curated lists, both URL formats ─────────────
         ...GUIDE_SITES.map(url => () => scrapeGuideSite(url)),
         // ── Fandom wiki — community-posted share codes ────────────────────────
