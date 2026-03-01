@@ -475,10 +475,14 @@ function termClear() {
 
 // ── Site input validator ──────────────────────────────────────────────────────
 function onSiteInput() {
-  const val = document.getElementById('siteInput').value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*/, '');
+  const raw = document.getElementById('siteInput').value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*/, '');
   const status = document.getElementById('siteStatus');
-  if (!val) { status.textContent = ''; return; }
-  const known = KNOWN_SITES.some(s => s.includes(val) || val.includes(s.replace('www.','')));
+  if (!raw || raw.length < 4) { status.textContent = ''; return; }
+  // Must match a known site exactly — either raw IS a known site or known site ends with .raw
+  const known = KNOWN_SITES.some(s => {
+    const clean = s.replace('www.', '');
+    return clean === raw || clean.endsWith('.' + raw) || raw === s;
+  });
   if (known) {
     status.textContent = '✓ Site supported';
     status.style.color = '#3aff64';
