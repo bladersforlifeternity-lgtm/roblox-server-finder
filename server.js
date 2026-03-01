@@ -49,19 +49,68 @@ const http = axios.create({
   timeout: 12000,
 });
 
+// ╔══════════════════════════════════════════════════════════════════╗
+// ║  REDDIT OAuth — required since Reddit's 2023 API changes         ║
+// ║  Create a free app at reddit.com/prefs/apps (script type)        ║
+// ║  Set env vars: REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET            ║
+// ║  Falls back to unauthenticated if no creds provided              ║
+// ╚══════════════════════════════════════════════════════════════════╝
+const REDDIT_CLIENT_ID     = process.env.REDDIT_CLIENT_ID     || null;
+const REDDIT_CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET || null;
+
+let redditToken     = null;
+let redditTokenExp  = 0;
+
+async function getRedditToken() {
+  if (!REDDIT_CLIENT_ID || !REDDIT_CLIENT_SECRET) return null;
+  if (redditToken && Date.now() < redditTokenExp) return redditToken;
+  try {
+    const res = await axios.post(
+      "https://www.reddit.com/api/v1/access_token",
+      "grant_type=client_credentials",
+      {
+        auth: { username: REDDIT_CLIENT_ID, password: REDDIT_CLIENT_SECRET },
+        headers: {
+          "User-Agent": "RobloxServerFinder/1.0 (by /u/serverfinderbot)",
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        timeout: 10000,
+      }
+    );
+    redditToken    = res.data.access_token;
+    redditTokenExp = Date.now() + (res.data.expires_in - 60) * 1000;
+    console.log("✅ Reddit OAuth token obtained");
+    return redditToken;
+  } catch (e) {
+    console.error("Reddit OAuth failed:", e.message);
+    return null;
+  }
+}
+
 async function redditGet(url, params, retries = 2) {
+  const token = await getRedditToken();
+  // Use OAuth API if we have a token, otherwise fall back to public endpoint
+  const apiUrl = token ? url.replace("www.reddit.com", "oauth.reddit.com") : url;
+  const headers = token
+    ? { "Authorization": `Bearer ${token}`, "User-Agent": "RobloxServerFinder/1.0 (by /u/serverfinderbot)" }
+    : { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" };
+
   for (let i = 0; i <= retries; i++) {
     try {
-      const res = await http.get(url, { params });
+      const res = await http.get(apiUrl, { params, headers });
       return res.data;
     } catch (e) {
       const status = e.response?.status;
-      // 429 = rate limited — back off and retry
       if (status === 429 && i < retries) {
         const delay = (i + 1) * 3000;
         console.warn(`Reddit 429 — waiting ${delay}ms before retry ${i + 1}`);
         await new Promise((r) => setTimeout(r, delay));
         continue;
+      }
+      if (status === 401 && token) {
+        // Token expired mid-session — clear and retry once
+        redditToken = null;
+        redditTokenExp = 0;
       }
       throw e;
     }
@@ -467,7 +516,7 @@ app.get("/", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Brainrot Server Finder running on port ${PORT}`);
-  console.log(`📡 Reddit: enabled`);
+  console.log(`📡 Reddit: ${(REDDIT_CLIENT_ID && REDDIT_CLIENT_SECRET) ? "OAuth enabled" : "⚠️ no credentials — add REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET"}`);
   console.log(`📺 YouTube: ${YOUTUBE_API_KEY ? "enabled" : "disabled (no YOUTUBE_API_KEY)"}`);
   console.log(`🔵 Google: ${(GOOGLE_CX && GOOGLE_API_KEY) ? "enabled" : `disabled (GOOGLE_CX=${!!GOOGLE_CX}, GOOGLE_API_KEY=${!!GOOGLE_API_KEY})`}`);
 });
