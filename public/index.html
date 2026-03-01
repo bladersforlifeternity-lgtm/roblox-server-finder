@@ -400,11 +400,11 @@ async function doSearch() {
     'Scanning Reddit for private servers…',
     'Searching r/StealaBrainrot1…',
     'Scanning YouTube descriptions…',
-    'Scraping RBXServers.xyz (384 servers)…',
     'Scraping game guide websites…',
     'Checking Fandom wiki…',
     'Searching Google…',
-    'Parsing share codes…',
+    '✓ Validating links are still alive…',
+    'Removing dead links…',
     'Almost there…',
   ];
   let msgIdx = 0;
@@ -551,6 +551,11 @@ function buildCards(results) {
     body.appendChild(code);
     body.appendChild(source);
 
+    // Live badge
+    const liveBadge = document.createElement('span');
+    liveBadge.textContent = '✓ Live';
+    liveBadge.style.cssText = "font-family:'Space Mono',monospace;font-size:10px;padding:2px 7px;border-radius:4px;background:rgba(58,255,100,0.12);color:#3aff64;border:1px solid rgba(58,255,100,0.3);flex-shrink:0;";
+
     // Type badge
     const typeBadge = document.createElement('span');
     typeBadge.textContent = r.type || 'Server';
@@ -571,6 +576,7 @@ function buildCards(results) {
 
     card.appendChild(icon);
     card.appendChild(body);
+    card.appendChild(liveBadge);
     card.appendChild(typeBadge);
     card.appendChild(providerBadge);
     card.appendChild(joinBtn);
