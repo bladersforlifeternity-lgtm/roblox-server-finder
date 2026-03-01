@@ -687,7 +687,7 @@ app.get("/api/search-stream", async (req, res) => {
   res.end();
 });
 
-
+app.get("/api/status", (req, res) => {
   res.json({
     status: "online",
     providers: {
